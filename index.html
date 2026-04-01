@@ -56,9 +56,19 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         // --- Firebase Configuration ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const apiKey = ""; // Gemini API キー (環境により提供)
+        // 外部公開時は、ここの設定をご自身のFirebaseプロジェクトの値に書き換えてください。
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'fm-club-dashboard-v1';
+        
+        // AI機能を使用するためのGemini APIキー
+        const apiKey = ""; 
 
         // Initialize Firebase
         if (!firebase.apps.length) {
@@ -76,6 +86,7 @@
         };
 
         // --- Icon Component ---
+        // Reactの再レンダリング時にLucideがDOM要素を削除してエラーになるのを防ぐためのラッパー
         const Icon = ({ name, size = 18, className = "" }) => {
             const ref = useRef(null);
             useEffect(() => {
@@ -186,7 +197,7 @@
                         }
                     } catch (err) {
                         console.error("Authentication failed:", err);
-                        setError("認証に失敗しました。ページを再読み込みしてください。");
+                        setError("認証に失敗しました。ページを再読み込みするか、Firebaseの設定を確認してください。");
                     }
                 };
                 initAuth();
@@ -209,7 +220,10 @@
                 const unsubConfig = configRef.onSnapshot((snap) => {
                     if (snap.exists) setConfig(snap.data());
                     else configRef.set(DEFAULT_CONFIG).catch(e => console.error("Initial config write error:", e));
-                }, (err) => console.error("Config listener error:", err));
+                }, (err) => {
+                    console.error("Config listener error:", err);
+                    setError("データの読み込み権限がありません。Firestoreのセキュリティルールを確認してください。");
+                });
 
                 const setupCollection = (colName, setState) => {
                     return db.collection(`artifacts/${appId}/public/data/${colName}`).onSnapshot((snap) => {
@@ -300,6 +314,7 @@
             // AI Methods
             const ai = {
                 diagnosis: async () => {
+                    if (!apiKey) return alert("Gemini APIキーが設定されていません。");
                     setAiLoading(true); setActiveModal('ai_response'); setAiResponse("経営状況の分析を行っています...");
                     const context = `会社名:${config.companyName}, ビジョン:${config.vision}, KPI:${kpis.map(k=>k.name+k.percent+'%').join(',')}, 課題:${challenges.map(c=>c.title).join(',')}`;
                     const prompt = `あなたはプロフェッショナルな経営コンサルタントです。以下のデータから、現在の組織の強み・懸念点・今後の最優先事項を日本語のMarkdownで分かりやすく診断してください。\n${context}`;
@@ -307,6 +322,7 @@
                     catch(e) { setAiResponse("AI診断中にエラーが発生しました。"); } finally { setAiLoading(false); }
                 },
                 suggest: async (c) => {
+                    if (!apiKey) return alert("Gemini APIキーが設定されていません。");
                     setAiLoading(true); setActiveModal('ai_response'); setAiResponse(`「${c.title}」に対するアクションを立案中...`);
                     const prompt = `課題「${c.title}」（方針：${c.strategy}）を解決するためのタスクを5つ日本語で提案してください。JSON形式 {"actions": ["タスク1", "タスク2", ...]} のみで出力してください。`;
                     try {
@@ -317,6 +333,7 @@
                     } catch(e) { setAiResponse("アクション生成中にエラーが発生しました。"); } finally { setAiLoading(false); }
                 },
                 summarize: async () => {
+                    if (!apiKey) return alert("Gemini APIキーが設定されていません。");
                     const agenda = document.getElementById('new_agenda')?.value;
                     if (!agenda) return;
                     setAiLoading(true);
@@ -324,7 +341,7 @@
                         const res = await callGemini(`要約してNext Actionを作成: ${agenda}`, "簡潔な箇条書きで、決定事項と担当者を整理してください。");
                         const decisionsEl = document.getElementById('new_decisions');
                         if (decisionsEl) decisionsEl.value = res;
-                    } finally { setAiLoading(false); }
+                    } catch(e) { alert("要約中にエラーが発生しました"); } finally { setAiLoading(false); }
                 }
             };
 

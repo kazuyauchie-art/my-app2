@@ -12,35 +12,40 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- Firebase Compat SDK (ブラウザで直接動作させるためのCompatモード) -->
+    <!-- Firebase Compat SDK (ビルド不要のブラウザ直接動作用) -->
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore-compat.js"></script>
     
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap');
+        
         body {
             font-family: 'Inter', 'Noto Sans JP', sans-serif;
-            background-color: #f8fafc;
-            color: #1e293b;
+            background-color: #F9FAFB; /* Canvasライクなクリーンな背景色 */
+            color: #111827;
+            -webkit-font-smoothing: antialiased;
         }
-        .glass {
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-        }
+        
+        /* スクロールバーのモダン化 */
         ::-webkit-scrollbar {
-            width: 6px;
+            width: 8px;
+            height: 8px;
         }
         ::-webkit-scrollbar-track {
             background: transparent;
         }
         ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
+            background: #E5E7EB;
             border-radius: 10px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
+            background: #D1D5DB;
+        }
+
+        /* フォームフォーカス時のデフォルトアウトラインを消す */
+        textarea:focus, input:focus {
+            outline: none;
         }
     </style>
 </head>
@@ -53,7 +58,7 @@
         // --- Firebase Configuration ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const apiKey = ""; // 環境から提供されるGemini APIキー
+        const apiKey = ""; // Gemini API キー (環境により提供)
 
         // Initialize Firebase
         if (!firebase.apps.length) {
@@ -70,7 +75,7 @@
             logo: "📊"
         };
 
-        // --- Icon Component (Vanilla Lucide wrapper for React) ---
+        // --- Icon Component ---
         const Icon = ({ name, size = 18, className = "" }) => {
             const ref = useRef(null);
             useEffect(() => {
@@ -80,6 +85,7 @@
                     i.setAttribute('data-lucide', name);
                     i.style.width = `${size}px`;
                     i.style.height = `${size}px`;
+                    i.style.strokeWidth = "2";
                     ref.current.appendChild(i);
                     window.lucide.createIcons();
                 }
@@ -106,18 +112,18 @@
             return result.candidates?.[0]?.content?.parts?.[0]?.text || "回答を取得できませんでした。";
         };
 
-        // --- UI Sub-components ---
+        // --- UI Modal ---
         const Modal = ({ isOpen, onClose, title, children, size = "max-w-md" }) => {
             const modalRef = useRef();
             if (!isOpen) return null;
             const handleOverlayClick = (e) => { if (modalRef.current === e.target) onClose(); };
             return (
-                <div ref={modalRef} onClick={handleOverlayClick} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
-                    <div className={`bg-white rounded-xl shadow-2xl w-full ${size} overflow-hidden animate-in fade-in zoom-in duration-200 my-8`}>
-                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h3 className="font-bold text-gray-800">{title}</h3>
-                            <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-500 hover:text-gray-800">
-                                <Icon name="x" size={20} />
+                <div ref={modalRef} onClick={handleOverlayClick} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm overflow-y-auto transition-opacity">
+                    <div className={`bg-white rounded-2xl shadow-2xl border border-gray-100 w-full ${size} overflow-hidden animate-in fade-in zoom-in duration-200 my-8`}>
+                        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center">
+                            <h3 className="font-semibold text-gray-800 text-lg tracking-tight">{title}</h3>
+                            <button onClick={onClose} className="p-2 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-gray-800">
+                                <Icon name="x" size={18} />
                             </button>
                         </div>
                         <div className="p-6">{children}</div>
@@ -127,26 +133,26 @@
         };
 
         const Card = ({ title, iconName, children, actions, className = "" }) => (
-            <div className={`glass border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col ${className}`}>
-                <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-white/50">
-                    <div className="flex items-center gap-2 font-bold text-slate-800">
-                        {iconName && <Icon name={iconName} className="text-blue-500" />}
+            <div className={`bg-white border border-gray-200/80 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col ${className}`}>
+                <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center">
+                    <div className="flex items-center gap-3 font-semibold text-gray-800 tracking-tight">
+                        {iconName && <div className="p-1.5 bg-blue-50/80 text-blue-600 rounded-lg"><Icon name={iconName} size={18} /></div>}
                         {title}
                     </div>
                     <div className="flex items-center gap-2">{actions}</div>
                 </div>
-                <div className="p-5 flex-1">{children}</div>
+                <div className="p-6 flex-1">{children}</div>
             </div>
         );
 
         const ProgressBar = ({ percent }) => {
             const colorClass = useMemo(() => {
-                if (percent >= 100) return 'bg-green-500';
-                if (percent >= 60) return 'bg-yellow-500';
-                return 'bg-red-500';
+                if (percent >= 100) return 'bg-emerald-500';
+                if (percent >= 60) return 'bg-amber-500';
+                return 'bg-rose-500';
             }, [percent]);
             return (
-                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
                     <div className={`h-full transition-all duration-1000 ease-out ${colorClass}`} style={{ width: `${Math.min(100, percent)}%` }} />
                 </div>
             );
@@ -169,7 +175,7 @@
             const [editItem, setEditItem] = useState(null);
             const [deleteTarget, setDeleteTarget] = useState(null);
 
-            // Authentication
+            // Authentication Initialization
             useEffect(() => {
                 const initAuth = async () => {
                     try {
@@ -195,20 +201,20 @@
                 };
             }, []);
 
-            // Firestore Listeners
+            // Firestore Data Listeners
             useEffect(() => {
                 if (!user) return;
 
                 const configRef = db.doc(`artifacts/${appId}/public/data/config/settings`);
                 const unsubConfig = configRef.onSnapshot((snap) => {
                     if (snap.exists) setConfig(snap.data());
-                    else configRef.set(DEFAULT_CONFIG).catch(e => console.error(e));
-                }, (err) => console.error("Config error:", err));
+                    else configRef.set(DEFAULT_CONFIG).catch(e => console.error("Initial config write error:", e));
+                }, (err) => console.error("Config listener error:", err));
 
                 const setupCollection = (colName, setState) => {
                     return db.collection(`artifacts/${appId}/public/data/${colName}`).onSnapshot((snap) => {
                         setState(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                    }, (err) => console.error(`${colName} error:`, err));
+                    }, (err) => console.error(`${colName} listener error:`, err));
                 };
 
                 const unsubs = [
@@ -222,59 +228,57 @@
                 return () => unsubs.forEach(u => u());
             }, [user]);
 
-            // CRUD Operations
-            const saveConfig = async (e) => {
-                e.preventDefault();
-                if (!user) return;
-                const formData = Object.fromEntries(new FormData(e.target));
-                await db.doc(`artifacts/${appId}/public/data/config/settings`).set(formData);
-                setActiveModal(null);
-            };
-
-            const handleKpi = async (e) => {
-                e.preventDefault();
-                if (!user) return;
-                const f = new FormData(e.target);
-                const cur = parseFloat(f.get('current')) || 0, tar = parseFloat(f.get('target')) || 1;
-                const data = { name: f.get('name'), current: cur, target: tar, percent: Math.round((cur/tar)*100), unit: f.get('unit') };
-                if (editItem) await db.doc(`artifacts/${appId}/public/data/kpis/${editItem.id}`).update(data);
-                else await db.collection(`artifacts/${appId}/public/data/kpis`).add(data);
-                setActiveModal(null); setEditItem(null);
-            };
-
-            const handleChallenge = async (e) => {
-                e.preventDefault();
-                if (!user) return;
-                const f = new FormData(e.target);
-                const data = { title: f.get('title'), strategy: f.get('strategy') };
-                if (editItem) await db.doc(`artifacts/${appId}/public/data/challenges/${editItem.id}`).update(data);
-                else await db.collection(`artifacts/${appId}/public/data/challenges`).add(data);
-                setActiveModal(null); setEditItem(null);
-            };
-
-            const handleTask = async (e) => {
-                e.preventDefault();
-                if (!user) return;
-                const f = new FormData(e.target);
-                const data = { title: f.get('title'), owner: f.get('owner'), deadline: f.get('deadline'), status: editItem?.status || 'todo' };
-                if (editItem) await db.doc(`artifacts/${appId}/public/data/tasks/${editItem.id}`).update(data);
-                else await db.collection(`artifacts/${appId}/public/data/tasks`).add(data);
-                setActiveModal(null); setEditItem(null);
+            // CRUD Methods
+            const crud = {
+                saveConfig: async (e) => {
+                    e.preventDefault();
+                    if (!user) return;
+                    const formData = Object.fromEntries(new FormData(e.target));
+                    await db.doc(`artifacts/${appId}/public/data/config/settings`).set(formData);
+                    setActiveModal(null);
+                },
+                handleKpi: async (e) => {
+                    e.preventDefault();
+                    if (!user) return;
+                    const f = new FormData(e.target);
+                    const cur = parseFloat(f.get('current')) || 0, tar = parseFloat(f.get('target')) || 1;
+                    const data = { name: f.get('name'), current: cur, target: tar, percent: Math.round((cur/tar)*100), unit: f.get('unit') };
+                    if (editItem) await db.doc(`artifacts/${appId}/public/data/kpis/${editItem.id}`).update(data);
+                    else await db.collection(`artifacts/${appId}/public/data/kpis`).add(data);
+                    setActiveModal(null); setEditItem(null);
+                },
+                handleChallenge: async (e) => {
+                    e.preventDefault();
+                    if (!user) return;
+                    const f = new FormData(e.target);
+                    const data = { title: f.get('title'), strategy: f.get('strategy') };
+                    if (editItem) await db.doc(`artifacts/${appId}/public/data/challenges/${editItem.id}`).update(data);
+                    else await db.collection(`artifacts/${appId}/public/data/challenges`).add(data);
+                    setActiveModal(null); setEditItem(null);
+                },
+                handleTask: async (e) => {
+                    e.preventDefault();
+                    if (!user) return;
+                    const f = new FormData(e.target);
+                    const data = { title: f.get('title'), owner: f.get('owner'), deadline: f.get('deadline'), status: editItem?.status || 'todo' };
+                    if (editItem) await db.doc(`artifacts/${appId}/public/data/tasks/${editItem.id}`).update(data);
+                    else await db.collection(`artifacts/${appId}/public/data/tasks`).add(data);
+                    setActiveModal(null); setEditItem(null);
+                },
+                handleMeeting: async (e) => {
+                    e.preventDefault();
+                    if (!user) return;
+                    const f = new FormData(e.target);
+                    const data = { date: f.get('date'), agenda: f.get('agenda'), decisions: f.get('decisions') };
+                    if (editItem) await db.doc(`artifacts/${appId}/public/data/meetings/${editItem.id}`).update(data);
+                    else await db.collection(`artifacts/${appId}/public/data/meetings`).add(data);
+                    setActiveModal(null); setEditItem(null);
+                }
             };
 
             const updateTaskStatus = async (taskId, newStatus) => {
                 if (!user) return;
                 await db.doc(`artifacts/${appId}/public/data/tasks/${taskId}`).update({ status: newStatus });
-            };
-
-            const handleMeeting = async (e) => {
-                e.preventDefault();
-                if (!user) return;
-                const f = new FormData(e.target);
-                const data = { date: f.get('date'), agenda: f.get('agenda'), decisions: f.get('decisions') };
-                if (editItem) await db.doc(`artifacts/${appId}/public/data/meetings/${editItem.id}`).update(data);
-                else await db.collection(`artifacts/${appId}/public/data/meetings`).add(data);
-                setActiveModal(null); setEditItem(null);
             };
 
             const requestDelete = (col, id) => {
@@ -293,24 +297,35 @@
                 else document.exitFullscreen();
             };
 
-            // AI Operations
-            const generateFullDiagnosis = async () => {
-                setAiLoading(true); setActiveModal('ai_response'); setAiResponse("経営診断データを分析中...");
-                const context = `会社名:${config.companyName}, ビジョン:${config.vision}, KPI:${kpis.map(k=>k.name+':'+k.percent+'%').join(',')}, 課題:${challenges.map(c=>c.title).join(',')}`;
-                const prompt = `あなたは経営コンサルタントです。以下のデータから強み・懸念点・最優先事項を日本語のMarkdownで診断してください。\n${context}`;
-                try { setAiResponse(await callGemini(prompt)); } 
-                catch(e) { setAiResponse("AI診断中にエラーが発生しました。"); } finally { setAiLoading(false); }
-            };
-
-            const suggestActionsFromChallenge = async (challenge) => {
-                setAiLoading(true); setActiveModal('ai_response'); setAiResponse(`「${challenge.title}」に対するアクションを立案中...`);
-                const prompt = `課題「${challenge.title}」（方針：${challenge.strategy}）を解決するためのタスクを5つ日本語で提案してください。JSON形式 {"actions": ["T1", "T2", ...]} のみで出力してください。`;
-                try {
-                    const res = await callGemini(prompt, "JSON形式のみ出力。");
-                    const parsed = JSON.parse(res.replace(/```json|```/g, "").trim());
-                    setAiResponse(`### ${challenge.title} への推奨アクション\n\n` + parsed.actions.map(a => `- ${a}`).join('\n'));
-                    setEditItem({ type: 'bulk_tasks', data: parsed.actions });
-                } catch(e) { setAiResponse("アクション生成中にエラーが発生しました。"); } finally { setAiLoading(false); }
+            // AI Methods
+            const ai = {
+                diagnosis: async () => {
+                    setAiLoading(true); setActiveModal('ai_response'); setAiResponse("経営状況の分析を行っています...");
+                    const context = `会社名:${config.companyName}, ビジョン:${config.vision}, KPI:${kpis.map(k=>k.name+k.percent+'%').join(',')}, 課題:${challenges.map(c=>c.title).join(',')}`;
+                    const prompt = `あなたはプロフェッショナルな経営コンサルタントです。以下のデータから、現在の組織の強み・懸念点・今後の最優先事項を日本語のMarkdownで分かりやすく診断してください。\n${context}`;
+                    try { setAiResponse(await callGemini(prompt)); } 
+                    catch(e) { setAiResponse("AI診断中にエラーが発生しました。"); } finally { setAiLoading(false); }
+                },
+                suggest: async (c) => {
+                    setAiLoading(true); setActiveModal('ai_response'); setAiResponse(`「${c.title}」に対するアクションを立案中...`);
+                    const prompt = `課題「${c.title}」（方針：${c.strategy}）を解決するためのタスクを5つ日本語で提案してください。JSON形式 {"actions": ["タスク1", "タスク2", ...]} のみで出力してください。`;
+                    try {
+                        const res = await callGemini(prompt, "JSON形式のみ出力。");
+                        const parsed = JSON.parse(res.replace(/```json|```/g, "").trim());
+                        setAiResponse(`### ${c.title} への推奨アクション\n\n` + parsed.actions.map(a => `- ${a}`).join('\n'));
+                        setEditItem({ type: 'bulk_tasks', data: parsed.actions });
+                    } catch(e) { setAiResponse("アクション生成中にエラーが発生しました。"); } finally { setAiLoading(false); }
+                },
+                summarize: async () => {
+                    const agenda = document.getElementById('new_agenda')?.value;
+                    if (!agenda) return;
+                    setAiLoading(true);
+                    try { 
+                        const res = await callGemini(`要約してNext Actionを作成: ${agenda}`, "簡潔な箇条書きで、決定事項と担当者を整理してください。");
+                        const decisionsEl = document.getElementById('new_decisions');
+                        if (decisionsEl) decisionsEl.value = res;
+                    } finally { setAiLoading(false); }
+                }
             };
 
             const addAiTasksToBoard = async () => {
@@ -321,100 +336,117 @@
                 setActiveModal(null); setEditItem(null);
             };
 
-            const summarizeMeetingAgenda = async () => {
-                const agenda = document.getElementById('new_agenda')?.value;
-                if (!agenda) return;
-                setAiLoading(true);
-                try { 
-                    const res = await callGemini(`以下の面談アジェンダを整理し、議論ポイントと決定事項(ドラフト)を作成してください。\n${agenda}`, "簡潔な箇条書きで。");
-                    const el = document.getElementById('new_decisions');
-                    if (el) el.value = res;
-                } finally { setAiLoading(false); }
-            };
-
             if (error) return (
-                <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 text-center">
-                    <Card title="エラー"><p className="text-red-600 font-bold mb-4">{error}</p><button onClick={()=>window.location.reload()} className="px-4 py-2 bg-blue-600 text-white rounded-lg">再読み込み</button></Card>
+                <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] p-6 text-center">
+                    <div className="bg-white p-8 rounded-2xl shadow-sm border border-red-100 max-w-sm w-full">
+                        <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4"><Icon name="alert-circle" size={24}/></div>
+                        <h2 className="font-semibold text-gray-800 mb-2">エラーが発生しました</h2>
+                        <p className="text-gray-500 text-sm mb-6">{error}</p>
+                        <button onClick={()=>window.location.reload()} className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors">再読み込み</button>
+                    </div>
                 </div>
             );
-            if (!user) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Icon name="loader-2" className="animate-spin text-blue-500" size={32} /></div>;
+            if (!user) return <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB]"><Icon name="loader-2" className="animate-spin text-gray-400" size={32} /></div>;
 
             return (
-                <div className={`min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 text-slate-900 p-4 md:p-8 ${isFullscreen ? 'overflow-y-auto' : ''}`}>
-                    <div className="max-w-7xl mx-auto space-y-8">
+                <div className={`min-h-screen bg-[#F9FAFB] text-gray-800 p-4 md:p-8 ${isFullscreen ? 'overflow-y-auto' : ''}`}>
+                    <div className="max-w-6xl mx-auto space-y-8">
+                        
                         {/* Header */}
-                        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-slate-200">
-                            <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-3xl shadow-lg">
+                        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6">
+                            <div className="flex items-center gap-5">
+                                <div className="w-14 h-14 bg-gradient-to-tr from-gray-800 to-gray-900 text-white rounded-2xl flex items-center justify-center text-2xl shadow-md border border-gray-700">
                                     {config.logo}
                                 </div>
                                 <div>
-                                    <div className="flex items-center gap-3">
-                                        <h1 className="text-3xl font-black text-slate-800 tracking-tight">{config.companyName}</h1>
-                                        <button onClick={() => setActiveModal('config')} className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors" title="設定を編集"><Icon name="edit-2" size={16}/></button>
+                                    <div className="flex items-center gap-2">
+                                        <h1 className="text-2xl font-bold tracking-tight text-gray-900">{config.companyName}</h1>
+                                        <button onClick={() => setActiveModal('config')} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="設定を編集">
+                                            <Icon name="settings" size={16}/>
+                                        </button>
                                     </div>
-                                    <div className="flex items-center gap-3 mt-1">
-                                        <p className="text-slate-500 font-medium">伴走プロジェクト・ダッシュボード</p>
-                                        <button onClick={generateFullDiagnosis} className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold rounded-full animate-pulse">
+                                    <div className="flex items-center gap-3 mt-1.5">
+                                        <p className="text-gray-500 text-sm font-medium">伴走プロジェクト・ダッシュボード</p>
+                                        <button onClick={ai.diagnosis} className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-[11px] font-semibold rounded-full shadow-sm hover:shadow transition-all">
                                             <Icon name="sparkles" size={12}/> AI 経営診断
                                         </button>
                                     </div>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                <button onClick={toggleFullscreen} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-sm flex items-center gap-2 hover:border-blue-300 transition-colors shadow-sm">
-                                    <Icon name={isFullscreen ? "minimize" : "maximize"} size={16}/> {isFullscreen ? "縮小" : "全画面"}
+                                <button onClick={toggleFullscreen} className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl font-medium text-gray-600 text-sm flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm">
+                                    <Icon name={isFullscreen ? "minimize" : "maximize"} size={16}/> <span className="hidden sm:inline">{isFullscreen ? "縮小" : "全画面"}</span>
                                 </button>
-                                <a href="https://member.fmclub.jp/" target="_blank" className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm hover:shadow-md transition-all group">
-                                    F&M Club <Icon name="external-link" size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                                <a href="https://member.fmclub.jp/" target="_blank" className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl font-medium text-sm hover:bg-gray-800 shadow-sm transition-all group">
+                                    会員サイト <Icon name="external-link" size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                                 </a>
                             </div>
                         </header>
 
                         {/* Vision / Slogan */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="bg-white p-6 rounded-2xl border-l-4 border-blue-500 shadow-sm relative group">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vision / 3年後の姿</span>
-                                <p className="text-lg font-bold text-slate-800 mt-1 leading-relaxed">{config.vision}</p>
+                            <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm relative group">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Vision / 3年後の姿</span>
+                                </div>
+                                <p className="text-gray-800 font-medium leading-relaxed">{config.vision}</p>
                             </div>
-                            <div className="bg-white p-6 rounded-2xl border-l-4 border-indigo-500 shadow-sm relative group">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Slogan / 今期のスローガン</span>
-                                <p className="text-lg font-bold text-slate-800 mt-1 leading-relaxed">{config.slogan}</p>
+                            <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm relative group">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Slogan / 今期のスローガン</span>
+                                </div>
+                                <p className="text-gray-800 font-medium leading-relaxed">{config.slogan}</p>
                             </div>
                         </div>
 
                         {/* Main Panels */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            <Card title="KPI 進捗" iconName="trending-up" actions={<button onClick={()=>{setEditItem(null); setActiveModal('kpi');}} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"><Icon name="plus" size={18}/></button>}>
+                            {/* KPI Panel */}
+                            <Card title="主要KPIの進捗" iconName="bar-chart-3" actions={<button onClick={()=>{setEditItem(null); setActiveModal('kpi');}} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Icon name="plus" size={18}/></button>}>
                                 <div className="space-y-6">
-                                    {kpis.length === 0 && <p className="text-center text-slate-400 py-8 italic text-sm">記録なし</p>}
+                                    {kpis.length === 0 && <div className="text-center py-10"><Icon name="line-chart" size={32} className="mx-auto text-gray-200 mb-2" /><p className="text-gray-400 text-sm">KPIが登録されていません</p></div>}
                                     {kpis.map(k => (
-                                        <div key={k.id} className="group">
+                                        <div key={k.id} className="group relative">
                                             <div className="flex justify-between items-end mb-2">
-                                                <div><h4 className="font-bold flex items-center gap-2 text-slate-800">{k.name} <button onClick={()=>{setEditItem(k); setActiveModal('kpi');}} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-blue-500 transition-all"><Icon name="edit-2" size={12}/></button></h4><span className="text-xs text-slate-400">目標: {k.target}{k.unit}</span></div>
-                                                <div className="text-right"><span className={`text-sm font-bold ${k.percent>=100?'text-green-600':'text-blue-600'}`}>{k.percent}%</span><div className="text-xs text-slate-600 font-bold">{k.current} / {k.target}</div></div>
+                                                <div>
+                                                    <h4 className="font-semibold flex items-center gap-2 text-gray-800">
+                                                        {k.name} 
+                                                        <button onClick={()=>{setEditItem(k); setActiveModal('kpi');}} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-500 transition-all"><Icon name="edit-2" size={12}/></button>
+                                                    </h4>
+                                                    <span className="text-xs text-gray-400 font-medium">目標: {k.target}{k.unit}</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className={`text-sm font-bold ${k.percent>=100?'text-emerald-600':'text-gray-700'}`}>{k.percent}%</span>
+                                                    <div className="text-xs text-gray-500 font-medium">{k.current} / {k.target}</div>
+                                                </div>
                                             </div>
                                             <ProgressBar percent={k.percent} />
-                                            <button onClick={()=> requestDelete('kpis', k.id)} className="text-[10px] text-slate-300 opacity-0 group-hover:opacity-100 mt-1 block ml-auto hover:text-red-500">削除</button>
+                                            <button onClick={()=> requestDelete('kpis', k.id)} className="absolute right-0 top-1 text-[10px] text-gray-300 opacity-0 group-hover:opacity-100 hover:text-rose-500 transition-colors">削除</button>
                                         </div>
                                     ))}
                                 </div>
                             </Card>
 
-                            <Card title="主要課題と経営方針" iconName="target" actions={<button onClick={()=>{setEditItem(null); setActiveModal('challenge');}} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"><Icon name="plus" size={18}/></button>}>
+                            {/* Challenges Panel */}
+                            <Card title="課題と経営方針" iconName="target" actions={<button onClick={()=>{setEditItem(null); setActiveModal('challenge');}} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Icon name="plus" size={18}/></button>}>
                                 <div className="space-y-4">
-                                    {challenges.length === 0 && <p className="text-center text-slate-400 py-8 italic text-sm">課題なし</p>}
+                                    {challenges.length === 0 && <div className="text-center py-10"><Icon name="target" size={32} className="mx-auto text-gray-200 mb-2" /><p className="text-gray-400 text-sm">課題が登録されていません</p></div>}
                                     {challenges.map((c, i) => (
-                                        <div key={c.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl group relative hover:border-indigo-200 transition-all">
-                                            <div className="flex justify-between items-start mb-1">
-                                                <h4 className="font-bold flex items-center gap-2 text-slate-800"><span className="w-5 h-5 bg-indigo-500 text-white text-[10px] flex items-center justify-center rounded-full font-bold">{i+1}</span>{c.title}</h4>
-                                                <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-all">
-                                                    <button onClick={()=>suggestActionsFromChallenge(c)} className="text-amber-500 hover:text-amber-600 text-[10px] font-bold flex items-center gap-1"><Icon name="sparkles" size={12}/> AI提案</button>
-                                                    <button onClick={()=>{setEditItem(c); setActiveModal('challenge');}} className="text-slate-400 hover:text-blue-500"><Icon name="edit-2" size={14}/></button>
-                                                    <button onClick={()=> requestDelete('challenges', c.id)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={14}/></button>
+                                        <div key={c.id} className="p-4 bg-gray-50/50 border border-gray-100 rounded-xl group hover:border-indigo-100 hover:bg-indigo-50/30 transition-all">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h4 className="font-semibold flex items-center gap-2 text-gray-800">
+                                                    <span className="w-5 h-5 bg-white border border-gray-200 text-gray-600 text-[10px] flex items-center justify-center rounded-md font-bold shadow-sm">{i+1}</span>
+                                                    {c.title}
+                                                </h4>
+                                                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                                                    <button onClick={()=>ai.suggest(c)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-md transition-colors" title="AIアクション生成"><Icon name="sparkles" size={14}/></button>
+                                                    <button onClick={()=>{setEditItem(c); setActiveModal('challenge');}} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-white rounded-md transition-colors"><Icon name="edit-2" size={14}/></button>
+                                                    <button onClick={()=> requestDelete('challenges', c.id)} className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-white rounded-md transition-colors"><Icon name="trash-2" size={14}/></button>
                                                 </div>
                                             </div>
-                                            <p className="text-sm text-slate-600 ml-7 italic leading-relaxed"><span className="text-indigo-500 font-bold not-italic">方針:</span> {c.strategy}</p>
+                                            <p className="text-sm text-gray-600 ml-7 leading-relaxed"><span className="text-indigo-500 font-semibold mr-1">方針:</span>{c.strategy}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -422,176 +454,201 @@
                         </div>
 
                         {/* Kanban Section */}
-                        <section className="space-y-4">
-                            <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800"><Icon name="trello" className="text-blue-500"/> アクションプラン</h2>
+                        <section className="pt-4">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-lg font-bold flex items-center gap-2 text-gray-800"><Icon name="layout-dashboard" className="text-gray-400"/> アクションボード</h2>
+                                <button onClick={() => { setEditItem(null); setActiveModal('task'); }} className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-gray-50 shadow-sm transition-all">
+                                    <Icon name="plus" size={16} /> タスク追加
+                                </button>
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 {['todo', 'doing', 'done'].map(status => (
-                                    <div key={status} className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200 min-h-[400px] flex flex-col gap-4">
-                                        <div className="flex items-center justify-between border-b pb-2 border-slate-200">
-                                            <span className="font-bold text-slate-700">{status==='todo'?'未着手':status==='doing'?'進行中':'完了実績'}</span>
-                                            <span className="bg-white border text-xs px-2 rounded-full font-bold text-slate-400">{tasks.filter(t=>t.status===status).length}</span>
+                                    <div key={status} className="bg-gray-50 border border-gray-100 p-4 rounded-2xl min-h-[400px] flex flex-col gap-3">
+                                        <div className="flex items-center justify-between px-1 pb-1">
+                                            <span className="font-semibold text-gray-600 text-sm">{status==='todo'?'未着手':status==='doing'?'進行中':'完了実績'}</span>
+                                            <span className="bg-white border border-gray-200 text-[11px] px-2 py-0.5 rounded-full font-bold text-gray-500 shadow-sm">{tasks.filter(t=>t.status===status).length}</span>
                                         </div>
                                         <div className="space-y-3 flex-1 overflow-y-auto">
                                             {tasks.filter(t=>t.status===status).map(task => (
                                                 status === 'done' ? (
-                                                    <div key={task.id} className="bg-white/60 p-3 rounded-lg border border-slate-200 flex items-center justify-between gap-3 text-sm group hover:bg-white transition-all shadow-sm">
-                                                        <div className="flex items-center gap-3 flex-1 min-w-0 line-through text-slate-400">
-                                                            <span className="text-[10px] font-bold bg-slate-50 px-2 rounded whitespace-nowrap border border-slate-100">{task.deadline||'完了'}</span>
-                                                            <span className="truncate flex-1">{task.title}</span>
+                                                    // 完了リスト表示
+                                                    <div key={task.id} className="bg-white p-3 rounded-xl border border-gray-100 flex items-center justify-between gap-3 text-sm group hover:border-gray-200 transition-all shadow-sm">
+                                                        <div className="flex items-center gap-3 flex-1 min-w-0 line-through text-gray-400">
+                                                            <span className="text-[10px] font-bold bg-gray-50 px-1.5 py-0.5 rounded text-gray-400 border border-gray-100 whitespace-nowrap">{task.deadline||'完了'}</span>
+                                                            <span className="truncate flex-1 font-medium">{task.title}</span>
                                                         </div>
                                                         <div className="flex gap-1 shrink-0">
-                                                            <button onClick={()=>updateTaskStatus(task.id, 'doing')} className="text-slate-300 hover:text-blue-500 transition-colors" title="進行中に戻す"><Icon name="chevron-left" size={14}/></button>
-                                                            <button onClick={()=>requestDelete('tasks', task.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"><Icon name="trash-2" size={14}/></button>
+                                                            <button onClick={()=>updateTaskStatus(task.id, 'doing')} className="p-1.5 text-gray-300 hover:text-blue-500 bg-gray-50 rounded-md transition-colors" title="進行中に戻す"><Icon name="rotate-ccw" size={14}/></button>
+                                                            <button onClick={()=>requestDelete('tasks', task.id)} className="p-1.5 text-gray-300 hover:text-rose-500 bg-gray-50 rounded-md transition-colors"><Icon name="trash-2" size={14}/></button>
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div key={task.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm group hover:border-blue-300 transition-all">
-                                                        <div className="flex justify-between items-start mb-2">
-                                                            <h5 className="font-bold text-sm text-slate-800 leading-snug">{task.title}</h5>
-                                                            <button onClick={()=>requestDelete('tasks', task.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"><Icon name="trash-2" size={14}/></button>
+                                                    // カード表示
+                                                    <div key={task.id} className="bg-white p-4 rounded-xl border border-gray-200/75 shadow-sm group hover:shadow hover:border-blue-200 transition-all">
+                                                        <div className="flex justify-between items-start mb-3">
+                                                            <h5 className="font-semibold text-sm text-gray-800 leading-snug">{task.title}</h5>
+                                                            <button onClick={()=>requestDelete('tasks', task.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-rose-500 transition-all"><Icon name="x" size={14}/></button>
                                                         </div>
-                                                        <div className="flex justify-between items-end text-[10px] text-slate-400 font-medium">
-                                                            <div>担当: {task.owner}<br/>期限: {task.deadline}</div>
+                                                        <div className="flex justify-between items-end text-[11px] text-gray-500 font-medium">
+                                                            <div className="flex flex-col gap-1">
+                                                                <span className="flex items-center gap-1"><Icon name="user" size={10}/> {task.owner || '未設定'}</span>
+                                                                <span className="flex items-center gap-1 text-gray-400"><Icon name="calendar" size={10}/> {task.deadline || '期日なし'}</span>
+                                                            </div>
                                                             <div className="flex gap-1">
-                                                                {status==='doing' && <button onClick={()=>updateTaskStatus(task.id, 'todo')} className="p-1 hover:text-blue-500 transition-colors"><Icon name="chevron-left" size={14}/></button>}
-                                                                <button onClick={()=>updateTaskStatus(task.id, status==='todo'?'doing':'done')} className="p-1 text-blue-500 hover:text-blue-700 transition-colors"><Icon name="chevron-right" size={14}/></button>
+                                                                {status==='doing' && <button onClick={()=>updateTaskStatus(task.id, 'todo')} className="p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 rounded-md transition-colors"><Icon name="chevron-left" size={14}/></button>}
+                                                                <button onClick={()=>updateTaskStatus(task.id, status==='todo'?'doing':'done')} className={`p-1.5 rounded-md transition-colors text-white ${status==='todo'?'bg-blue-500 hover:bg-blue-600':'bg-emerald-500 hover:bg-emerald-600'}`}>
+                                                                    <Icon name={status==='todo'?'play':'check'} size={14}/>
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 )
                                             ))}
                                         </div>
-                                        {status === 'todo' && <button onClick={()=>{setEditItem(null); setActiveModal('task');}} className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs font-bold hover:bg-white hover:border-blue-200 transition-all">+ 新規タスク追加</button>}
                                     </div>
                                 ))}
                             </div>
                         </section>
 
                         {/* Meetings Log */}
-                        <Card title="定例面談ログ" iconName="calendar" actions={<button onClick={()=>{setEditItem(null);setActiveModal('meeting');}} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">+ 追加</button>}>
-                            <div className="overflow-x-auto -mx-5">
-                                <table className="w-full text-left">
-                                    <thead><tr className="bg-slate-50 border-y border-slate-100 text-[10px] text-slate-400 font-bold uppercase tracking-widest"><th className="px-6 py-3 w-28">実施日</th><th className="px-6 py-3">アジェンダ</th><th className="px-6 py-3">決定事項 & 次のアクション</th><th className="px-6 py-3 text-center w-20">操作</th></tr></thead>
-                                    <tbody className="divide-y border-slate-100 text-sm">
-                                        {meetings.length === 0 && <tr><td colSpan="4" className="text-center py-10 text-slate-400 italic">面談記録はありません</td></tr>}
-                                        {meetings.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(m=>(
-                                            <tr key={m.id} className="hover:bg-blue-50/30 transition-all">
-                                                <td className="px-6 py-4 font-bold text-blue-600 whitespace-nowrap">{m.date}</td>
-                                                <td className="px-6 py-4 text-slate-700 whitespace-pre-wrap leading-relaxed">{m.agenda}</td>
-                                                <td className="px-6 py-4 text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">{m.decisions}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <div className="flex gap-2 justify-center">
-                                                        <button onClick={()=>{setEditItem(m);setActiveModal('meeting');}} className="text-slate-300 hover:text-blue-500 transition-colors" title="編集"><Icon name="edit-2" size={14}/></button>
-                                                        <button onClick={()=>requestDelete('meetings', m.id)} className="text-slate-300 hover:text-red-500 transition-colors" title="削除"><Icon name="trash-2" size={14}/></button>
-                                                    </div>
-                                                </td>
+                        <section className="pt-4">
+                            <Card title="定例面談ログ" iconName="messages-square" actions={<button onClick={()=>{setEditItem(null);setActiveModal('meeting');}} className="px-3 py-1.5 bg-gray-900 text-white rounded-lg text-xs font-medium hover:bg-gray-800 transition-colors flex items-center gap-1"><Icon name="plus" size={14}/> 記録を追加</button>}>
+                                <div className="overflow-x-auto -mx-6 px-6">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                                                <th className="pb-3 w-28 font-medium">実施日</th>
+                                                <th className="pb-3 font-medium">アジェンダ内容</th>
+                                                <th className="pb-3 font-medium">決定事項・アクション</th>
+                                                <th className="pb-3 text-center w-20 font-medium">操作</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </Card>
+                                        </thead>
+                                        <tbody className="text-sm">
+                                            {meetings.length === 0 && <tr><td colSpan="4" className="text-center py-8 text-gray-400">面談記録はありません</td></tr>}
+                                            {meetings.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(m=>(
+                                                <tr key={m.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors group">
+                                                    <td className="py-4 pr-4 font-semibold text-gray-600 whitespace-nowrap align-top">{m.date}</td>
+                                                    <td className="py-4 pr-4 text-gray-600 whitespace-pre-wrap leading-relaxed align-top">{m.agenda}</td>
+                                                    <td className="py-4 pr-4 text-gray-800 font-medium whitespace-pre-wrap leading-relaxed align-top">{m.decisions}</td>
+                                                    <td className="py-4 align-top text-center">
+                                                        <div className="flex gap-1 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={()=>{setEditItem(m);setActiveModal('meeting');}} className="p-1.5 text-gray-400 hover:text-blue-600 bg-white rounded shadow-sm border border-gray-100" title="編集"><Icon name="edit-2" size={14}/></button>
+                                                            <button onClick={()=>requestDelete('meetings', m.id)} className="p-1.5 text-gray-400 hover:text-rose-500 bg-white rounded shadow-sm border border-gray-100" title="削除"><Icon name="trash-2" size={14}/></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </Card>
+                        </section>
 
-                        <footer className="text-center text-slate-400 text-[10px] uppercase tracking-[0.2em] pt-8 pb-12 border-t border-slate-200 font-medium">© 2025 F&M Club Support Dashboard</footer>
+                        <footer className="text-center text-gray-400 text-[10px] font-medium uppercase tracking-[0.2em] pt-8 pb-12">
+                            © {new Date().getFullYear()} Workspace Dashboard
+                        </footer>
                     </div>
 
-                    {/* Modals */}
+                    {/* --- Modals --- */}
                     <Modal isOpen={activeModal==='delete_confirm'} onClose={()=>setActiveModal(null)} title="削除の確認">
                         <div className="space-y-6">
-                            <p className="text-slate-600 text-sm">この項目を完全に削除します。取り消しはできません。よろしいですか？</p>
+                            <p className="text-gray-600 text-sm">このデータを完全に削除します。この操作は取り消せません。よろしいですか？</p>
                             <div className="flex gap-3">
-                                <button type="button" onClick={()=>setActiveModal(null)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold hover:bg-slate-200 transition-colors">キャンセル</button>
-                                <button type="button" onClick={executeDelete} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-100">削除する</button>
+                                <button type="button" onClick={()=>setActiveModal(null)} className="flex-1 py-2.5 bg-gray-100 rounded-xl font-medium text-gray-700 hover:bg-gray-200 transition-colors">キャンセル</button>
+                                <button type="button" onClick={executeDelete} className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl font-medium hover:bg-rose-700 transition-colors">削除する</button>
                             </div>
                         </div>
                     </Modal>
 
-                    <Modal isOpen={activeModal==='ai_response'} onClose={()=>setActiveModal(null)} title="✨ AI 経営サポート" size="max-w-2xl">
+                    <Modal isOpen={activeModal==='ai_response'} onClose={()=>setActiveModal(null)} title="✨ AI アシスタント" size="max-w-2xl">
                         <div className="space-y-4">
-                            <div className={`prose prose-sm max-w-none text-slate-700 leading-relaxed whitespace-pre-wrap ${aiLoading?'opacity-50':''}`}>
+                            <div className={`prose prose-sm max-w-none text-gray-700 leading-relaxed whitespace-pre-wrap ${aiLoading?'opacity-50':''}`}>
                                 {aiResponse.split('\n').map((line, i) => (
-                                    <p key={i} className={line.startsWith('#') ? 'font-bold text-slate-900 text-lg mt-4 border-b border-slate-100 pb-1' : line.startsWith('-') ? 'ml-4' : ''}>{line}</p>
+                                    <p key={i} className={line.startsWith('#') ? 'font-bold text-gray-900 text-lg mt-4 border-b border-gray-100 pb-2' : line.startsWith('-') ? 'ml-4' : ''}>{line}</p>
                                 ))}
                             </div>
-                            {aiLoading && <div className="flex justify-center py-4"><Icon name="loader-2" className="animate-spin text-blue-500" size={24}/></div>}
+                            {aiLoading && <div className="flex justify-center py-8"><Icon name="loader-2" className="animate-spin text-gray-300" size={32}/></div>}
+                            
                             {!aiLoading && editItem?.type==='bulk_tasks' && (
-                                <div className="flex gap-3 pt-4">
-                                    <button onClick={()=>setActiveModal(null)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">却下</button>
-                                    <button onClick={addAiTasksToBoard} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-md">
-                                        <Icon name="plus" size={18}/> これらをボードに追加
+                                <div className="flex gap-3 pt-6 mt-4 border-t border-gray-100">
+                                    <button onClick={()=>setActiveModal(null)} className="flex-1 py-2.5 bg-gray-100 rounded-xl font-medium text-gray-600">破棄</button>
+                                    <button onClick={addAiTasksToBoard} className="flex-[2] py-2.5 bg-gray-900 text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-gray-800">
+                                        <Icon name="plus" size={16}/> これらをボードに追加
                                     </button>
                                 </div>
                             )}
-                            {!aiLoading && !editItem && <button onClick={()=>setActiveModal(null)} className="w-full py-3 bg-slate-100 rounded-xl font-bold hover:bg-slate-200 transition-colors mt-4">閉じる</button>}
+                            {!aiLoading && !editItem && <button onClick={()=>setActiveModal(null)} className="w-full py-2.5 mt-6 bg-gray-100 rounded-xl font-medium text-gray-700 hover:bg-gray-200 transition-colors">閉じる</button>}
                         </div>
                     </Modal>
 
-                    {/* Form Modals */}
-                    <Modal isOpen={activeModal==='config'} onClose={()=>setActiveModal(null)} title="全体設定の編集">
-                        <form onSubmit={saveConfig} className="space-y-4">
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">プロジェクト名</label><input name="companyName" defaultValue={config.companyName} className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" /></div>
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ロゴ (絵文字)</label><input name="logo" defaultValue={config.logo} className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-xl" maxLength="2" /></div>
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ビジョン</label><textarea name="vision" defaultValue={config.vision} className="w-full p-2 border border-slate-200 rounded-xl h-24 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" /></div>
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">スローガン</label><textarea name="slogan" defaultValue={config.slogan} className="w-full p-2 border border-slate-200 rounded-xl h-24 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" /></div>
-                            <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={()=>setActiveModal(null)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">キャンセル</button>
-                                <button type="submit" className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-md"><Icon name="save" size={18}/> 保存する</button>
+                    {/* Form Modals (Config, KPI, Challenge, Task, Meeting) */}
+                    <Modal isOpen={activeModal==='config'} onClose={()=>setActiveModal(null)} title="プロジェクト設定">
+                        <form onSubmit={crud.saveConfig} className="space-y-4">
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">プロジェクト名</label><input name="companyName" defaultValue={config.companyName} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" /></div>
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">ロゴ (絵文字)</label><input name="logo" defaultValue={config.logo} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" maxLength="2" /></div>
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">ビジョン</label><textarea name="vision" defaultValue={config.vision} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl h-24 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" /></div>
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">スローガン</label><textarea name="slogan" defaultValue={config.slogan} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl h-24 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" /></div>
+                            <div className="flex gap-3 pt-4">
+                                <button type="button" onClick={()=>setActiveModal(null)} className="flex-1 py-2.5 bg-gray-100 rounded-xl font-medium text-gray-600">キャンセル</button>
+                                <button type="submit" className="flex-[2] py-2.5 bg-gray-900 text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-gray-800"><Icon name="save" size={16}/> 保存する</button>
                             </div>
                         </form>
                     </Modal>
 
-                    <Modal isOpen={activeModal==='kpi'} onClose={()=>setActiveModal(null)} title={editItem?"KPIの編集":"新規KPI追加"}>
-                        <form onSubmit={handleKpi} className="space-y-4">
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">項目名</label><input name="name" defaultValue={editItem?.name} required className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="売上、生産性など" /></div>
+                    <Modal isOpen={activeModal==='kpi'} onClose={()=>setActiveModal(null)} title={editItem?"KPIの編集":"KPIの追加"}>
+                        <form onSubmit={crud.handleKpi} className="space-y-4">
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">項目名</label><input name="name" defaultValue={editItem?.name} required className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:border-blue-500" placeholder="例: 新規契約数" /></div>
                             <div className="grid grid-cols-2 gap-4">
-                                <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">現在値</label><input name="current" type="number" step="any" defaultValue={editItem?.current} required className="w-full p-2 border border-slate-200 rounded-xl outline-none" /></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">目標値</label><input name="target" type="number" step="any" defaultValue={editItem?.target} required className="w-full p-2 border border-slate-200 rounded-xl outline-none" /></div>
+                                <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">現在値</label><input name="current" type="number" step="any" defaultValue={editItem?.current} required className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:border-blue-500" /></div>
+                                <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">目標値</label><input name="target" type="number" step="any" defaultValue={editItem?.target} required className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:border-blue-500" /></div>
                             </div>
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">単位</label><input name="unit" defaultValue={editItem?.unit} className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="円、％、件など" /></div>
-                            <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={()=>{setActiveModal(null);setEditItem(null);}} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">キャンセル</button>
-                                <button type="submit" className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-md">{editItem?"更新":"追加"}</button>
-                            </div>
-                        </form>
-                    </Modal>
-
-                    <Modal isOpen={activeModal==='challenge'} onClose={()=>setActiveModal(null)} title={editItem?"課題の編集":"新規課題追加"}>
-                        <form onSubmit={handleChallenge} className="space-y-4">
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">課題タイトル</label><input name="title" defaultValue={editItem?.title} required className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">戦略方針</label><textarea name="strategy" defaultValue={editItem?.strategy} required className="w-full p-2 border border-slate-200 rounded-xl h-24 outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="どのように解決するか..." /></div>
-                            <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={()=>{setActiveModal(null);setEditItem(null);}} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">キャンセル</button>
-                                <button type="submit" className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-md">保存する</button>
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">単位</label><input name="unit" defaultValue={editItem?.unit} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:border-blue-500" placeholder="件、円、％など" /></div>
+                            <div className="flex gap-3 pt-4">
+                                <button type="button" onClick={()=>{setActiveModal(null);setEditItem(null);}} className="flex-1 py-2.5 bg-gray-100 rounded-xl font-medium text-gray-600">キャンセル</button>
+                                <button type="submit" className="flex-[2] py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700">{editItem?"更新":"追加"}</button>
                             </div>
                         </form>
                     </Modal>
 
-                    <Modal isOpen={activeModal==='task'} onClose={()=>setActiveModal(null)} title="アクション詳細">
-                        <form onSubmit={handleTask} className="space-y-4">
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">タスク内容</label><input name="title" defaultValue={editItem?.title} required className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                    <Modal isOpen={activeModal==='challenge'} onClose={()=>setActiveModal(null)} title={editItem?"課題の編集":"課題の追加"}>
+                        <form onSubmit={crud.handleChallenge} className="space-y-4">
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">課題タイトル</label><input name="title" defaultValue={editItem?.title} required className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:border-indigo-500" /></div>
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">方針・アプローチ</label><textarea name="strategy" defaultValue={editItem?.strategy} required className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl h-32 text-sm leading-relaxed focus:bg-white focus:border-indigo-500" placeholder="どのように解決するか..." /></div>
+                            <div className="flex gap-3 pt-4">
+                                <button type="button" onClick={()=>{setActiveModal(null);setEditItem(null);}} className="flex-1 py-2.5 bg-gray-100 rounded-xl font-medium text-gray-600">キャンセル</button>
+                                <button type="submit" className="flex-[2] py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700">保存</button>
+                            </div>
+                        </form>
+                    </Modal>
+
+                    <Modal isOpen={activeModal==='task'} onClose={()=>setActiveModal(null)} title={editItem ? "タスクの編集" : "タスクの追加"}>
+                        <form onSubmit={crud.handleTask} className="space-y-4">
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">タスク名</label><input name="title" defaultValue={editItem?.title} required className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:border-blue-500" /></div>
                             <div className="grid grid-cols-2 gap-4">
-                                <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">担当者</label><input name="owner" defaultValue={editItem?.owner} className="w-full p-2 border border-slate-200 rounded-xl outline-none" /></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">期限</label><input name="deadline" defaultValue={editItem?.deadline} className="w-full p-2 border border-slate-200 rounded-xl outline-none" placeholder="10/末 など" /></div>
+                                <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">担当者</label><input name="owner" defaultValue={editItem?.owner} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:border-blue-500" /></div>
+                                <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">期限</label><input name="deadline" defaultValue={editItem?.deadline} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:border-blue-500" placeholder="10/末 など" /></div>
                             </div>
-                            <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={()=>{setActiveModal(null);setEditItem(null);}} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">キャンセル</button>
-                                <button type="submit" className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-md">保存</button>
+                            <div className="flex gap-3 pt-4">
+                                <button type="button" onClick={()=>{setActiveModal(null);setEditItem(null);}} className="flex-1 py-2.5 bg-gray-100 rounded-xl font-medium text-gray-600">キャンセル</button>
+                                <button type="submit" className="flex-[2] py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800">保存</button>
                             </div>
                         </form>
                     </Modal>
 
-                    <Modal isOpen={activeModal==='meeting'} onClose={()=>setActiveModal(null)} title="定例面談記録">
-                        <form onSubmit={handleMeeting} className="space-y-4">
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">実施日</label><input name="date" type="date" defaultValue={editItem?.date || new Date().toISOString().split('T')[0]} required className="w-full p-2 border border-slate-200 rounded-xl outline-none" /></div>
+                    <Modal isOpen={activeModal==='meeting'} onClose={()=>setActiveModal(null)} title="面談記録">
+                        <form onSubmit={crud.handleMeeting} className="space-y-4">
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">実施日</label><input name="date" type="date" defaultValue={editItem?.date || new Date().toISOString().split('T')[0]} required className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white" /></div>
                             <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">アジェンダ (相談内容)</label>
-                                <textarea id="new_agenda" name="agenda" defaultValue={editItem?.agenda} required className="w-full p-2 border border-slate-200 rounded-xl h-24 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                                <button type="button" onClick={summarizeMeetingAgenda} disabled={aiLoading} className="mt-2 text-xs text-amber-600 font-bold flex items-center gap-1 hover:text-amber-700 transition-colors shadow-sm bg-white p-1 rounded border border-amber-100"><Icon name="sparkles" size={12}/> AIで要約と決定事項を案出</button>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">相談内容 (アジェンダ)</label>
+                                <textarea id="new_agenda" name="agenda" defaultValue={editItem?.agenda} required className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl h-24 text-sm focus:bg-white focus:border-blue-500" />
+                                <button type="button" onClick={ai.summarize} disabled={aiLoading} className="mt-2 px-3 py-1.5 text-xs text-amber-600 font-medium flex items-center gap-1.5 hover:bg-amber-50 rounded-lg transition-colors border border-amber-200 bg-white shadow-sm">
+                                    <Icon name="sparkles" size={12}/> AIで要約と決定事項を案出
+                                </button>
                             </div>
-                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">決定事項 & Next Action</label><textarea id="new_decisions" name="decisions" defaultValue={editItem?.decisions} required className="w-full p-2 border border-slate-200 rounded-xl h-32 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" /></div>
-                            <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={()=>{setActiveModal(null);setEditItem(null);}} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">キャンセル</button>
-                                <button type="submit" className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-md">記録を保存</button>
+                            <div><label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 block">決定事項 & 次のアクション</label><textarea id="new_decisions" name="decisions" defaultValue={editItem?.decisions} required className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl h-32 text-sm font-medium focus:bg-white focus:border-blue-500" /></div>
+                            <div className="flex gap-3 pt-4">
+                                <button type="button" onClick={()=>{setActiveModal(null);setEditItem(null);}} className="flex-1 py-2.5 bg-gray-100 rounded-xl font-medium text-gray-600">キャンセル</button>
+                                <button type="submit" className="flex-[2] py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800">保存</button>
                             </div>
                         </form>
                     </Modal>

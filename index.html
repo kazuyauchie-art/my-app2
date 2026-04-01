@@ -12,7 +12,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- Firebase Compat SDK (Using Compat mode for stable global scope access) -->
+    <!-- Firebase Compat SDK (ブラウザで直接動作させるためのCompatモード) -->
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore-compat.js"></script>
@@ -53,7 +53,7 @@
         // --- Firebase Configuration ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const apiKey = ""; // Gemini API key provided by environment
+        const apiKey = ""; // 環境から提供されるGemini APIキー
 
         // Initialize Firebase
         if (!firebase.apps.length) {
@@ -70,7 +70,7 @@
             logo: "📊"
         };
 
-        // --- Icon Component (Safe from direct DOM mutation conflicts) ---
+        // --- Icon Component (Vanilla Lucide wrapper for React) ---
         const Icon = ({ name, size = 18, className = "" }) => {
             const ref = useRef(null);
             useEffect(() => {
@@ -106,7 +106,7 @@
             return result.candidates?.[0]?.content?.parts?.[0]?.text || "回答を取得できませんでした。";
         };
 
-        // --- UI Modal ---
+        // --- UI Sub-components ---
         const Modal = ({ isOpen, onClose, title, children, size = "max-w-md" }) => {
             const modalRef = useRef();
             if (!isOpen) return null;
@@ -152,6 +152,7 @@
             );
         };
 
+        // --- Main App Component ---
         const App = () => {
             const [user, setUser] = useState(null);
             const [config, setConfig] = useState(DEFAULT_CONFIG);
@@ -168,7 +169,7 @@
             const [editItem, setEditItem] = useState(null);
             const [deleteTarget, setDeleteTarget] = useState(null);
 
-            // Authentication Initialization (Mandatory Order)
+            // Authentication
             useEffect(() => {
                 const initAuth = async () => {
                     try {
@@ -194,21 +195,20 @@
                 };
             }, []);
 
-            // Firestore Data Listeners (Guarded by user state)
+            // Firestore Listeners
             useEffect(() => {
                 if (!user) return;
 
-                // Rule 1: artifacts/{appId}/public/data/{collectionName}
                 const configRef = db.doc(`artifacts/${appId}/public/data/config/settings`);
                 const unsubConfig = configRef.onSnapshot((snap) => {
                     if (snap.exists) setConfig(snap.data());
-                    else configRef.set(DEFAULT_CONFIG).catch(e => console.error("Initial config write error:", e));
-                }, (err) => console.error("Config listener error:", err));
+                    else configRef.set(DEFAULT_CONFIG).catch(e => console.error(e));
+                }, (err) => console.error("Config error:", err));
 
                 const setupCollection = (colName, setState) => {
                     return db.collection(`artifacts/${appId}/public/data/${colName}`).onSnapshot((snap) => {
                         setState(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                    }, (err) => console.error(`${colName} listener error:`, err));
+                    }, (err) => console.error(`${colName} error:`, err));
                 };
 
                 const unsubs = [
@@ -222,51 +222,59 @@
                 return () => unsubs.forEach(u => u());
             }, [user]);
 
-            const crud = {
-                saveConfig: async (e) => {
-                    e.preventDefault();
-                    if (!user) return;
-                    const formData = Object.fromEntries(new FormData(e.target));
-                    await db.doc(`artifacts/${appId}/public/data/config/settings`).set(formData);
-                    setActiveModal(null);
-                },
-                handleKpi: async (e) => {
-                    e.preventDefault();
-                    if (!user) return;
-                    const f = new FormData(e.target);
-                    const cur = parseFloat(f.get('current')) || 0, tar = parseFloat(f.get('target')) || 1;
-                    const data = { name: f.get('name'), current: cur, target: tar, percent: Math.round((cur/tar)*100), unit: f.get('unit') };
-                    if (editItem) await db.doc(`artifacts/${appId}/public/data/kpis/${editItem.id}`).update(data);
-                    else await db.collection(`artifacts/${appId}/public/data/kpis`).add(data);
-                    setActiveModal(null); setEditItem(null);
-                },
-                handleChallenge: async (e) => {
-                    e.preventDefault();
-                    if (!user) return;
-                    const f = new FormData(e.target);
-                    const data = { title: f.get('title'), strategy: f.get('strategy') };
-                    if (editItem) await db.doc(`artifacts/${appId}/public/data/challenges/${editItem.id}`).update(data);
-                    else await db.collection(`artifacts/${appId}/public/data/challenges`).add(data);
-                    setActiveModal(null); setEditItem(null);
-                },
-                handleTask: async (e) => {
-                    e.preventDefault();
-                    if (!user) return;
-                    const f = new FormData(e.target);
-                    const data = { title: f.get('title'), owner: f.get('owner'), deadline: f.get('deadline'), status: editItem?.status || 'todo' };
-                    if (editItem) await db.doc(`artifacts/${appId}/public/data/tasks/${editItem.id}`).update(data);
-                    else await db.collection(`artifacts/${appId}/public/data/tasks`).add(data);
-                    setActiveModal(null); setEditItem(null);
-                },
-                handleMeeting: async (e) => {
-                    e.preventDefault();
-                    if (!user) return;
-                    const f = new FormData(e.target);
-                    const data = { date: f.get('date'), agenda: f.get('agenda'), decisions: f.get('decisions') };
-                    if (editItem) await db.doc(`artifacts/${appId}/public/data/meetings/${editItem.id}`).update(data);
-                    else await db.collection(`artifacts/${appId}/public/data/meetings`).add(data);
-                    setActiveModal(null); setEditItem(null);
-                }
+            // CRUD Operations
+            const saveConfig = async (e) => {
+                e.preventDefault();
+                if (!user) return;
+                const formData = Object.fromEntries(new FormData(e.target));
+                await db.doc(`artifacts/${appId}/public/data/config/settings`).set(formData);
+                setActiveModal(null);
+            };
+
+            const handleKpi = async (e) => {
+                e.preventDefault();
+                if (!user) return;
+                const f = new FormData(e.target);
+                const cur = parseFloat(f.get('current')) || 0, tar = parseFloat(f.get('target')) || 1;
+                const data = { name: f.get('name'), current: cur, target: tar, percent: Math.round((cur/tar)*100), unit: f.get('unit') };
+                if (editItem) await db.doc(`artifacts/${appId}/public/data/kpis/${editItem.id}`).update(data);
+                else await db.collection(`artifacts/${appId}/public/data/kpis`).add(data);
+                setActiveModal(null); setEditItem(null);
+            };
+
+            const handleChallenge = async (e) => {
+                e.preventDefault();
+                if (!user) return;
+                const f = new FormData(e.target);
+                const data = { title: f.get('title'), strategy: f.get('strategy') };
+                if (editItem) await db.doc(`artifacts/${appId}/public/data/challenges/${editItem.id}`).update(data);
+                else await db.collection(`artifacts/${appId}/public/data/challenges`).add(data);
+                setActiveModal(null); setEditItem(null);
+            };
+
+            const handleTask = async (e) => {
+                e.preventDefault();
+                if (!user) return;
+                const f = new FormData(e.target);
+                const data = { title: f.get('title'), owner: f.get('owner'), deadline: f.get('deadline'), status: editItem?.status || 'todo' };
+                if (editItem) await db.doc(`artifacts/${appId}/public/data/tasks/${editItem.id}`).update(data);
+                else await db.collection(`artifacts/${appId}/public/data/tasks`).add(data);
+                setActiveModal(null); setEditItem(null);
+            };
+
+            const updateTaskStatus = async (taskId, newStatus) => {
+                if (!user) return;
+                await db.doc(`artifacts/${appId}/public/data/tasks/${taskId}`).update({ status: newStatus });
+            };
+
+            const handleMeeting = async (e) => {
+                e.preventDefault();
+                if (!user) return;
+                const f = new FormData(e.target);
+                const data = { date: f.get('date'), agenda: f.get('agenda'), decisions: f.get('decisions') };
+                if (editItem) await db.doc(`artifacts/${appId}/public/data/meetings/${editItem.id}`).update(data);
+                else await db.collection(`artifacts/${appId}/public/data/meetings`).add(data);
+                setActiveModal(null); setEditItem(null);
             };
 
             const requestDelete = (col, id) => {
@@ -285,37 +293,51 @@
                 else document.exitFullscreen();
             };
 
-            const ai = {
-                diagnosis: async () => {
-                    setAiLoading(true); setActiveModal('ai_response'); setAiResponse("経営診断データを分析中...");
-                    const prompt = `診断依頼: 会社名:${config.companyName}, ビジョン:${config.vision}, KPI:${kpis.map(k=>k.name+k.percent+'%').join(',')}`;
-                    try { setAiResponse(await callGemini(prompt, "プロフェッショナル経営コンサルタントとして強み・懸念点・具体的アドバイスを日本語Markdownで構成してください。")); } 
-                    catch(e) { setAiResponse("AI診断中にエラーが発生しました。"); } finally { setAiLoading(false); }
-                },
-                suggest: async (c) => {
-                    setAiLoading(true); setActiveModal('ai_response'); setAiResponse("アクション案を立案中...");
-                    const prompt = `課題「${c.title}」の解決タスク5つ。JSON {"actions": ["T1", "T2", ...]} のみ出力してください。`;
-                    try {
-                        const res = await callGemini(prompt, "JSON形式のみ出力。");
-                        const parsed = JSON.parse(res.replace(/```json|```/g, "").trim());
-                        setAiResponse(`### ${c.title} への推奨アクション\n\n` + parsed.actions.map(a => `- ${a}`).join('\n'));
-                        setEditItem({ type: 'bulk_tasks', data: parsed.actions });
-                    } catch(e) { setAiResponse("AI提案エラー。"); } finally { setAiLoading(false); }
-                },
-                summarize: async () => {
-                    const agenda = document.getElementById('new_agenda')?.value;
-                    if (!agenda) return;
-                    setAiLoading(true);
-                    try { 
-                        const res = await callGemini(`要約してNext Actionを作成: ${agenda}`, "箇条書きで決定事項とタスクを整理。");
-                        const decisionsEl = document.getElementById('new_decisions');
-                        if (decisionsEl) decisionsEl.value = res;
-                    } finally { setAiLoading(false); }
-                }
+            // AI Operations
+            const generateFullDiagnosis = async () => {
+                setAiLoading(true); setActiveModal('ai_response'); setAiResponse("経営診断データを分析中...");
+                const context = `会社名:${config.companyName}, ビジョン:${config.vision}, KPI:${kpis.map(k=>k.name+':'+k.percent+'%').join(',')}, 課題:${challenges.map(c=>c.title).join(',')}`;
+                const prompt = `あなたは経営コンサルタントです。以下のデータから強み・懸念点・最優先事項を日本語のMarkdownで診断してください。\n${context}`;
+                try { setAiResponse(await callGemini(prompt)); } 
+                catch(e) { setAiResponse("AI診断中にエラーが発生しました。"); } finally { setAiLoading(false); }
             };
 
-            if (error) return <div className="h-screen flex items-center justify-center p-6 bg-slate-50 text-center"><Card title="エラー"><p className="text-red-600 font-bold mb-4">{error}</p><button onClick={()=>window.location.reload()} className="px-4 py-2 bg-blue-600 text-white rounded-lg">再読み込み</button></Card></div>;
-            if (!user) return <div className="h-screen flex items-center justify-center bg-slate-50"><Icon name="loader-2" className="animate-spin text-blue-500" size={32} /></div>;
+            const suggestActionsFromChallenge = async (challenge) => {
+                setAiLoading(true); setActiveModal('ai_response'); setAiResponse(`「${challenge.title}」に対するアクションを立案中...`);
+                const prompt = `課題「${challenge.title}」（方針：${challenge.strategy}）を解決するためのタスクを5つ日本語で提案してください。JSON形式 {"actions": ["T1", "T2", ...]} のみで出力してください。`;
+                try {
+                    const res = await callGemini(prompt, "JSON形式のみ出力。");
+                    const parsed = JSON.parse(res.replace(/```json|```/g, "").trim());
+                    setAiResponse(`### ${challenge.title} への推奨アクション\n\n` + parsed.actions.map(a => `- ${a}`).join('\n'));
+                    setEditItem({ type: 'bulk_tasks', data: parsed.actions });
+                } catch(e) { setAiResponse("アクション生成中にエラーが発生しました。"); } finally { setAiLoading(false); }
+            };
+
+            const addAiTasksToBoard = async () => {
+                if (!editItem || editItem.type !== 'bulk_tasks') return;
+                for (const title of editItem.data) {
+                    await db.collection(`artifacts/${appId}/public/data/tasks`).add({ title, owner: "AI 提案", deadline: "近日", status: 'todo' });
+                }
+                setActiveModal(null); setEditItem(null);
+            };
+
+            const summarizeMeetingAgenda = async () => {
+                const agenda = document.getElementById('new_agenda')?.value;
+                if (!agenda) return;
+                setAiLoading(true);
+                try { 
+                    const res = await callGemini(`以下の面談アジェンダを整理し、議論ポイントと決定事項(ドラフト)を作成してください。\n${agenda}`, "簡潔な箇条書きで。");
+                    const el = document.getElementById('new_decisions');
+                    if (el) el.value = res;
+                } finally { setAiLoading(false); }
+            };
+
+            if (error) return (
+                <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 text-center">
+                    <Card title="エラー"><p className="text-red-600 font-bold mb-4">{error}</p><button onClick={()=>window.location.reload()} className="px-4 py-2 bg-blue-600 text-white rounded-lg">再読み込み</button></Card>
+                </div>
+            );
+            if (!user) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Icon name="loader-2" className="animate-spin text-blue-500" size={32} /></div>;
 
             return (
                 <div className={`min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 text-slate-900 p-4 md:p-8 ${isFullscreen ? 'overflow-y-auto' : ''}`}>
@@ -323,7 +345,9 @@
                         {/* Header */}
                         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-slate-200">
                             <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-3xl shadow-lg">{config.logo}</div>
+                                <div className="w-16 h-16 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-3xl shadow-lg">
+                                    {config.logo}
+                                </div>
                                 <div>
                                     <div className="flex items-center gap-3">
                                         <h1 className="text-3xl font-black text-slate-800 tracking-tight">{config.companyName}</h1>
@@ -331,7 +355,9 @@
                                     </div>
                                     <div className="flex items-center gap-3 mt-1">
                                         <p className="text-slate-500 font-medium">伴走プロジェクト・ダッシュボード</p>
-                                        <button onClick={ai.diagnosis} className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold rounded-full animate-pulse"><Icon name="sparkles" size={12}/> AI 経営診断</button>
+                                        <button onClick={generateFullDiagnosis} className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold rounded-full animate-pulse">
+                                            <Icon name="sparkles" size={12}/> AI 経営診断
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -339,7 +365,9 @@
                                 <button onClick={toggleFullscreen} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-sm flex items-center gap-2 hover:border-blue-300 transition-colors shadow-sm">
                                     <Icon name={isFullscreen ? "minimize" : "maximize"} size={16}/> {isFullscreen ? "縮小" : "全画面"}
                                 </button>
-                                <a href="https://member.fmclub.jp/" target="_blank" className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm hover:shadow-md transition-all group">F&M Club <Icon name="external-link" size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" /></a>
+                                <a href="https://member.fmclub.jp/" target="_blank" className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm hover:shadow-md transition-all group">
+                                    F&M Club <Icon name="external-link" size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                                </a>
                             </div>
                         </header>
 
@@ -381,7 +409,7 @@
                                             <div className="flex justify-between items-start mb-1">
                                                 <h4 className="font-bold flex items-center gap-2 text-slate-800"><span className="w-5 h-5 bg-indigo-500 text-white text-[10px] flex items-center justify-center rounded-full font-bold">{i+1}</span>{c.title}</h4>
                                                 <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-all">
-                                                    <button onClick={()=>ai.suggest(c)} className="text-amber-500 hover:text-amber-600 text-[10px] font-bold flex items-center gap-1"><Icon name="sparkles" size={12}/> AI提案</button>
+                                                    <button onClick={()=>suggestActionsFromChallenge(c)} className="text-amber-500 hover:text-amber-600 text-[10px] font-bold flex items-center gap-1"><Icon name="sparkles" size={12}/> AI提案</button>
                                                     <button onClick={()=>{setEditItem(c); setActiveModal('challenge');}} className="text-slate-400 hover:text-blue-500"><Icon name="edit-2" size={14}/></button>
                                                     <button onClick={()=> requestDelete('challenges', c.id)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={14}/></button>
                                                 </div>
@@ -412,7 +440,7 @@
                                                             <span className="truncate flex-1">{task.title}</span>
                                                         </div>
                                                         <div className="flex gap-1 shrink-0">
-                                                            <button onClick={()=>db.doc(`artifacts/${appId}/public/data/tasks/${task.id}`).update({status:'doing'})} className="text-slate-300 hover:text-blue-500 transition-colors" title="戻す"><Icon name="chevron-left" size={14}/></button>
+                                                            <button onClick={()=>updateTaskStatus(task.id, 'doing')} className="text-slate-300 hover:text-blue-500 transition-colors" title="進行中に戻す"><Icon name="chevron-left" size={14}/></button>
                                                             <button onClick={()=>requestDelete('tasks', task.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500"><Icon name="trash-2" size={14}/></button>
                                                         </div>
                                                     </div>
@@ -425,8 +453,8 @@
                                                         <div className="flex justify-between items-end text-[10px] text-slate-400 font-medium">
                                                             <div>担当: {task.owner}<br/>期限: {task.deadline}</div>
                                                             <div className="flex gap-1">
-                                                                {status==='doing' && <button onClick={()=>db.doc(`artifacts/${appId}/public/data/tasks/${task.id}`).update({status:'todo'})} className="p-1 hover:text-blue-500 transition-colors"><Icon name="chevron-left" size={14}/></button>}
-                                                                <button onClick={()=>db.doc(`artifacts/${appId}/public/data/tasks/${task.id}`).update({status:status==='todo'?'doing':'done'})} className="p-1 text-blue-500 hover:text-blue-700 transition-colors"><Icon name="chevron-right" size={14}/></button>
+                                                                {status==='doing' && <button onClick={()=>updateTaskStatus(task.id, 'todo')} className="p-1 hover:text-blue-500 transition-colors"><Icon name="chevron-left" size={14}/></button>}
+                                                                <button onClick={()=>updateTaskStatus(task.id, status==='todo'?'doing':'done')} className="p-1 text-blue-500 hover:text-blue-700 transition-colors"><Icon name="chevron-right" size={14}/></button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -464,7 +492,7 @@
                             </div>
                         </Card>
 
-                        <footer className="text-center text-slate-400 text-[10px] uppercase tracking-[0.2em] pt-8 pb-12 border-t border-slate-200">© 2025 F&M Club Support Dashboard</footer>
+                        <footer className="text-center text-slate-400 text-[10px] uppercase tracking-[0.2em] pt-8 pb-12 border-t border-slate-200 font-medium">© 2025 F&M Club Support Dashboard</footer>
                     </div>
 
                     {/* Modals */}
@@ -489,10 +517,7 @@
                             {!aiLoading && editItem?.type==='bulk_tasks' && (
                                 <div className="flex gap-3 pt-4">
                                     <button onClick={()=>setActiveModal(null)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">却下</button>
-                                    <button onClick={async ()=>{
-                                        for(const t of editItem.data) await db.collection(`artifacts/${appId}/public/data/tasks`).add({title:t, owner:"AI提案", deadline:"近日", status:"todo"});
-                                        setActiveModal(null); setEditItem(null);
-                                    }} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-md">
+                                    <button onClick={addAiTasksToBoard} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-md">
                                         <Icon name="plus" size={18}/> これらをボードに追加
                                     </button>
                                 </div>
@@ -503,7 +528,7 @@
 
                     {/* Form Modals */}
                     <Modal isOpen={activeModal==='config'} onClose={()=>setActiveModal(null)} title="全体設定の編集">
-                        <form onSubmit={crud.saveConfig} className="space-y-4">
+                        <form onSubmit={saveConfig} className="space-y-4">
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">プロジェクト名</label><input name="companyName" defaultValue={config.companyName} className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" /></div>
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ロゴ (絵文字)</label><input name="logo" defaultValue={config.logo} className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-xl" maxLength="2" /></div>
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ビジョン</label><textarea name="vision" defaultValue={config.vision} className="w-full p-2 border border-slate-200 rounded-xl h-24 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" /></div>
@@ -516,7 +541,7 @@
                     </Modal>
 
                     <Modal isOpen={activeModal==='kpi'} onClose={()=>setActiveModal(null)} title={editItem?"KPIの編集":"新規KPI追加"}>
-                        <form onSubmit={crud.handleKpi} className="space-y-4">
+                        <form onSubmit={handleKpi} className="space-y-4">
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">項目名</label><input name="name" defaultValue={editItem?.name} required className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="売上、生産性など" /></div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">現在値</label><input name="current" type="number" step="any" defaultValue={editItem?.current} required className="w-full p-2 border border-slate-200 rounded-xl outline-none" /></div>
@@ -531,7 +556,7 @@
                     </Modal>
 
                     <Modal isOpen={activeModal==='challenge'} onClose={()=>setActiveModal(null)} title={editItem?"課題の編集":"新規課題追加"}>
-                        <form onSubmit={crud.handleChallenge} className="space-y-4">
+                        <form onSubmit={handleChallenge} className="space-y-4">
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">課題タイトル</label><input name="title" defaultValue={editItem?.title} required className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" /></div>
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">戦略方針</label><textarea name="strategy" defaultValue={editItem?.strategy} required className="w-full p-2 border border-slate-200 rounded-xl h-24 outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="どのように解決するか..." /></div>
                             <div className="flex gap-3 pt-2">
@@ -542,7 +567,7 @@
                     </Modal>
 
                     <Modal isOpen={activeModal==='task'} onClose={()=>setActiveModal(null)} title="アクション詳細">
-                        <form onSubmit={crud.handleTask} className="space-y-4">
+                        <form onSubmit={handleTask} className="space-y-4">
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">タスク内容</label><input name="title" defaultValue={editItem?.title} required className="w-full p-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" /></div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">担当者</label><input name="owner" defaultValue={editItem?.owner} className="w-full p-2 border border-slate-200 rounded-xl outline-none" /></div>
@@ -556,12 +581,12 @@
                     </Modal>
 
                     <Modal isOpen={activeModal==='meeting'} onClose={()=>setActiveModal(null)} title="定例面談記録">
-                        <form onSubmit={crud.handleMeeting} className="space-y-4">
+                        <form onSubmit={handleMeeting} className="space-y-4">
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">実施日</label><input name="date" type="date" defaultValue={editItem?.date || new Date().toISOString().split('T')[0]} required className="w-full p-2 border border-slate-200 rounded-xl outline-none" /></div>
                             <div>
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">アジェンダ (相談内容)</label>
                                 <textarea id="new_agenda" name="agenda" defaultValue={editItem?.agenda} required className="w-full p-2 border border-slate-200 rounded-xl h-24 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                                <button type="button" onClick={ai.summarize} disabled={aiLoading} className="mt-2 text-xs text-amber-600 font-bold flex items-center gap-1 hover:text-amber-700 transition-colors shadow-sm bg-white p-1 rounded border border-amber-100"><Icon name="sparkles" size={12}/> AIで要約と決定事項を案出</button>
+                                <button type="button" onClick={summarizeMeetingAgenda} disabled={aiLoading} className="mt-2 text-xs text-amber-600 font-bold flex items-center gap-1 hover:text-amber-700 transition-colors shadow-sm bg-white p-1 rounded border border-amber-100"><Icon name="sparkles" size={12}/> AIで要約と決定事項を案出</button>
                             </div>
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">決定事項 & Next Action</label><textarea id="new_decisions" name="decisions" defaultValue={editItem?.decisions} required className="w-full p-2 border border-slate-200 rounded-xl h-32 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" /></div>
                             <div className="flex gap-3 pt-2">

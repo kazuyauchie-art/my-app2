@@ -1,0 +1,681 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  TrendingUp, Target, Trello, Calendar, Plus, 
+  Trash2, Edit2, CheckCircle2, Clock, PlayCircle, 
+  ChevronRight, ExternalLink, AlertCircle, Save, X,
+  Sparkles, Loader2, MessageSquare, Lightbulb
+} from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, collection, doc, setDoc, getDoc, 
+  onSnapshot, addDoc, updateDoc, deleteDoc, query 
+} from 'firebase/firestore';
+import { 
+  getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken 
+} from 'firebase/auth';
+
+// --- Firebase & API Configuration ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'fm-club-dashboard-v1';
+const apiKey = ""; // Provided at runtime by environment
+
+// --- Default Values ---
+const DEFAULT_CONFIG = {
+  companyName: "F&M Club 伴走プロジェクト",
+  vision: "地域No.1の技術力で、顧客から選ばれ続ける100年企業になる",
+  slogan: "組織の壁を越え、全社一丸で生産性向上！",
+  logo: "📊"
+};
+
+// --- Gemini API Helper ---
+const callGemini = async (prompt, systemInstruction = "") => {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+  
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined,
+  };
+
+  const fetchWithRetry = async (retries = 0) => {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (err) {
+      if (retries < 5) {
+        const delay = Math.pow(2, retries) * 1000;
+        await new Promise(res => setTimeout(res, delay));
+        return fetchWithRetry(retries + 1);
+      }
+      throw err;
+    }
+  };
+
+  const result = await fetchWithRetry();
+  return result.candidates?.[0]?.content?.parts?.[0]?.text || "回答を取得できませんでした。";
+};
+
+// --- Sub-components ---
+
+const Modal = ({ isOpen, onClose, title, children, size = "max-w-md" }) => {
+  const modalRef = useRef();
+
+  if (!isOpen) return null;
+
+  const handleOverlayClick = (e) => {
+    if (modalRef.current === e.target) {
+      onClose();
+    }
+  };
+
+  return (
+    <div 
+      ref={modalRef}
+      onClick={handleOverlayClick}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto"
+    >
+      <div className={`bg-white rounded-xl shadow-2xl w-full ${size} overflow-hidden animate-in fade-in zoom-in duration-200 my-8`}>
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+          <h3 className="font-bold text-gray-800">{title}</h3>
+          <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-500 hover:text-gray-800">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="p-6">{children}</div>
+      </div>
+    </div>
+  );
+};
+
+const Card = ({ title, icon: Icon, children, actions, className = "" }) => (
+  <div className={`bg-white/80 backdrop-blur-md border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col ${className}`}>
+    <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-white/50">
+      <div className="flex items-center gap-2 font-bold text-slate-800">
+        {Icon && <Icon size={18} className="text-blue-500" />}
+        {title}
+      </div>
+      <div className="flex items-center gap-2">{actions}</div>
+    </div>
+    <div className="p-5 flex-1">{children}</div>
+  </div>
+);
+
+const ProgressBar = ({ percent }) => {
+  const colorClass = useMemo(() => {
+    if (percent >= 100) return 'bg-green-500';
+    if (percent >= 60) return 'bg-yellow-500';
+    return 'bg-red-500';
+  }, [percent]);
+
+  return (
+    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+      <div 
+        className={`h-full transition-all duration-1000 ease-out ${colorClass}`}
+        style={{ width: `${Math.min(100, percent)}%` }}
+      />
+    </div>
+  );
+};
+
+// --- Main App Component ---
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [kpis, setKpis] = useState([]);
+  const [challenges, setChallenges] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const [error, setError] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResponse, setAiResponse] = useState("");
+  
+  const [activeModal, setActiveModal] = useState(null); 
+  const [editItem, setEditItem] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { col, id }
+
+  // --- Auth & Data Fetching ---
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth error:", err);
+        setError("認証エラーが発生しました。");
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'settings');
+    const unsubConfig = onSnapshot(configRef, (snapshot) => {
+      if (snapshot.exists()) setConfig(snapshot.data());
+      else setDoc(configRef, DEFAULT_CONFIG).catch(err => console.error(err));
+    }, (err) => setError("設定の読み込みに失敗しました。"));
+
+    const setupListener = (collectionName, setState) => {
+      const q = collection(db, 'artifacts', appId, 'public', 'data', collectionName);
+      return onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        setState(data);
+      }, (err) => console.error(err));
+    };
+
+    const unsubs = [
+      setupListener('kpis', setKpis),
+      setupListener('challenges', setChallenges),
+      setupListener('tasks', setTasks),
+      setupListener('meetings', setMeetings)
+    ];
+
+    return () => { unsubConfig(); unsubs.forEach(u => u()); };
+  }, [user]);
+
+  // --- Operations ---
+  const saveConfig = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const newConfig = Object.fromEntries(formData);
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'settings'), newConfig);
+    setActiveModal(null);
+  };
+
+  const handleKpi = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const current = parseFloat(formData.get('current')) || 0;
+    const target = parseFloat(formData.get('target')) || 1;
+    const data = {
+      name: formData.get('name'),
+      current, target,
+      percent: Math.round((current / target) * 100),
+      unit: formData.get('unit')
+    };
+    if (editItem) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'kpis', editItem.id), data);
+    else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'kpis'), data);
+    setActiveModal(null); setEditItem(null);
+  };
+
+  const handleChallenge = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = { title: formData.get('title'), strategy: formData.get('strategy') };
+    if (editItem) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'challenges', editItem.id), data);
+    else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'challenges'), data);
+    setActiveModal(null); setEditItem(null);
+  };
+
+  const handleTask = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = {
+      title: formData.get('title'), owner: formData.get('owner'),
+      deadline: formData.get('deadline'), status: editItem?.status || 'todo'
+    };
+    if (editItem) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', editItem.id), data);
+    else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tasks'), data);
+    setActiveModal(null); setEditItem(null);
+  };
+
+  const handleMeeting = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = { date: formData.get('date'), agenda: formData.get('agenda'), decisions: formData.get('decisions') };
+    if (editItem) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'meetings', editItem.id), data);
+    else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'meetings'), data);
+    setActiveModal(null); setEditItem(null);
+  };
+
+  const requestDelete = (col, id) => {
+    setDeleteTarget({ col, id });
+    setActiveModal('delete_confirm');
+  };
+
+  const executeDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', deleteTarget.col, deleteTarget.id));
+      setActiveModal(null);
+      setDeleteTarget(null);
+    } catch (err) {
+      setError("削除中にエラーが発生しました。");
+    }
+  };
+
+  // --- AI Operations ---
+  const generateFullDiagnosis = async () => {
+    setAiLoading(true);
+    setActiveModal('ai_response');
+    setAiResponse("経営診断データを分析中...");
+    
+    const context = `
+      会社名: ${config.companyName}
+      ビジョン: ${config.vision}
+      スローガン: ${config.slogan}
+      KPI状況: ${kpis.map(k => `${k.name}: ${k.percent}%`).join(', ')}
+      現在の課題: ${challenges.map(c => c.title).join(', ')}
+      未完了タスク: ${tasks.filter(t => t.status !== 'done').map(t => t.title).join(', ')}
+    `;
+
+    const prompt = `あなたはF&M Clubのシニア経営コンサルタントです。以下のデータに基づき、現在の経営状況の診断、強み、懸念点、および今後3ヶ月で集中すべき「最優先事項」を日本語で簡潔に提示してください。
+    ${context}`;
+
+    try {
+      const response = await callGemini(prompt, "プロフェッショナルかつ前向きなコンサルティングトーンで回答してください。Markdown形式で構成してください。");
+      setAiResponse(response);
+    } catch (err) {
+      setAiResponse("AI診断中にエラーが発生しました。");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const suggestActionsFromChallenge = async (challenge) => {
+    setAiLoading(true);
+    setActiveModal('ai_response');
+    setAiResponse(`「${challenge.title}」に対するアクションを立案中...`);
+    
+    const prompt = `課題「${challenge.title}」（方針：${challenge.strategy}）を解決するために、今すぐ着手すべき具体的なアクションプラン（タスク）を5つ日本語で提案してください。
+    各タスクは15文字以内のタイトルにしてください。JSON形式 {"actions": ["タスク1", "タスク2", ...]} で出力してください。`;
+
+    try {
+      const response = await callGemini(prompt, "あなたは実務に強いPMです。出力は必ず指定したJSON形式のみにしてください。");
+      const cleanJson = response.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(cleanJson);
+      
+      setAiResponse(`### ${challenge.title} の推奨アクション\n\n以下のタスクが生成されました。これらをアクションプランに追加しますか？\n\n` + 
+                    parsed.actions.map(a => `- ${a}`).join('\n'));
+      
+      setEditItem({ type: 'bulk_tasks', data: parsed.actions });
+    } catch (err) {
+      setAiResponse("アクション生成中にエラーが発生しました。");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const addAiTasksToBoard = async () => {
+    if (!editItem || editItem.type !== 'bulk_tasks') return;
+    for (const title of editItem.data) {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tasks'), {
+        title, owner: "AI 提案", deadline: "近日", status: 'todo'
+      });
+    }
+    setActiveModal(null);
+    setEditItem(null);
+  };
+
+  const summarizeMeetingAgenda = async () => {
+    const agenda = document.getElementById('new_agenda')?.value;
+    if (!agenda) return; // Skip if empty
+    
+    setAiLoading(true);
+    const prompt = `以下の面談アジェンダ（相談内容）を整理し、議論のポイント3点と、想定される決定事項（誰が何をすべきか）のドラフトを作成してください。\nアジェンダ: ${agenda}`;
+
+    try {
+      const response = await callGemini(prompt, "簡潔な箇条書きで回答してください。");
+      const decisionsField = document.getElementById('new_decisions');
+      if (decisionsField) decisionsField.value = response;
+    } catch (err) {
+      setError("AI要約に失敗しました");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  if (error) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 text-center">
+      <Card title="通知">
+        <div className="space-y-4 py-4 px-8">
+          <p className="text-slate-700">{error}</p>
+          <button onClick={() => setError(null)} className="px-8 py-2 bg-blue-600 text-white rounded-lg font-bold">閉じる</button>
+        </div>
+      </Card>
+    </div>
+  );
+  if (!user) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-500" /></div>;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 text-slate-900 p-4 md:p-8 font-sans">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* Header */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-slate-200">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-3xl shadow-lg">
+              {config.logo}
+            </div>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-black tracking-tight text-slate-800">{config.companyName}</h1>
+                <button onClick={() => setActiveModal('config')} className="p-1.5 text-slate-400 hover:text-blue-500 rounded-lg transition-colors"><Edit2 size={16} /></button>
+              </div>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-slate-500 font-medium">伴走プロジェクト・ダッシュボード</p>
+                <button 
+                  onClick={generateFullDiagnosis}
+                  className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold rounded-full hover:shadow-md transition-all animate-pulse"
+                >
+                  <Sparkles size={12} /> ✨ AI 経営診断
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <a href="https://member.fmclub.jp/" target="_blank" className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 shadow-sm text-sm group hover:border-blue-300 transition-colors">
+              F&M Club <ExternalLink size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            </a>
+          </div>
+        </header>
+
+        {/* Vision Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-2xl border-l-4 border-blue-500 shadow-sm">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Vision / 3年後の姿</span>
+            <p className="text-lg font-bold text-slate-800 mt-1 leading-relaxed">{config.vision}</p>
+          </div>
+          <div className="bg-white p-6 rounded-2xl border-l-4 border-indigo-500 shadow-sm">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Slogan / 今期のスローガン</span>
+            <p className="text-lg font-bold text-slate-800 mt-1 leading-relaxed">{config.slogan}</p>
+          </div>
+        </div>
+
+        {/* KPIs & Challenges */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <Card title="KPI 進捗" icon={TrendingUp} actions={<button onClick={() => { setEditItem(null); setActiveModal('kpi'); }} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"><Plus size={18} /></button>}>
+            <div className="space-y-6">
+              {kpis.length === 0 && <p className="text-center text-slate-400 py-8 text-sm italic">KPIが登録されていません</p>}
+              {kpis.map(kpi => (
+                <div key={kpi.id} className="group">
+                  <div className="flex justify-between items-end mb-2">
+                    <div>
+                      <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                        {kpi.name}
+                        <button onClick={() => { setEditItem(kpi); setActiveModal('kpi'); }} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-blue-500 transition-all"><Edit2 size={12} /></button>
+                      </h4>
+                      <span className="text-xs text-slate-400">目標: {kpi.target.toLocaleString()}{kpi.unit}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-sm font-bold ${kpi.percent >= 100 ? 'text-green-600' : 'text-blue-600'}`}>{kpi.percent}%</span>
+                      <div className="text-xs font-bold text-slate-600">{kpi.current.toLocaleString()} / {kpi.target.toLocaleString()}</div>
+                    </div>
+                  </div>
+                  <ProgressBar percent={kpi.percent} />
+                  <div className="mt-1 text-right"><button onClick={() => requestDelete('kpis', kpi.id)} className="text-[10px] text-slate-300 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all">削除</button></div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card title="主要課題と経営方針" icon={Target} actions={<button onClick={() => { setEditItem(null); setActiveModal('challenge'); }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"><Plus size={18} /></button>}>
+            <div className="space-y-4">
+              {challenges.length === 0 && <p className="text-center text-slate-400 py-8 text-sm italic">課題が登録されていません</p>}
+              {challenges.map((item, idx) => (
+                <div key={item.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl group relative hover:border-indigo-200 transition-colors">
+                  <div className="flex justify-between items-start mb-1">
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                      <span className="w-5 h-5 bg-indigo-500 text-white text-[10px] flex items-center justify-center rounded-full">{idx + 1}</span>
+                      {item.title}
+                    </h4>
+                    <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-all">
+                      <button 
+                        onClick={() => suggestActionsFromChallenge(item)}
+                        className="text-amber-500 hover:text-amber-600 flex items-center gap-1 text-[10px] font-bold"
+                        title="AIアクション生成"
+                      >
+                        <Sparkles size={12} /> ✨ AI 提案
+                      </button>
+                      <button onClick={() => { setEditItem(item); setActiveModal('challenge'); }} className="text-slate-400 hover:text-blue-500"><Edit2 size={14}/></button>
+                      <button onClick={() => requestDelete('challenges', item.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-600 ml-7 italic leading-relaxed"><span className="text-indigo-500 font-bold not-italic">方針:</span> {item.strategy}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        {/* Kanban */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800"><Trello size={22} className="text-blue-500" /> アクションプラン</h2>
+            <button onClick={() => { setEditItem(null); setActiveModal('task'); }} className="px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-blue-700 shadow-md transition-all">
+              <Plus size={18} /> タスク追加
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {['todo', 'doing', 'done'].map(status => (
+              <div key={status} className="bg-slate-100/50 p-4 rounded-2xl border border-slate-200 min-h-[400px] flex flex-col gap-4">
+                <div className="flex items-center gap-2 px-2 pb-2 border-b border-slate-200/50">
+                  <span className="font-bold text-slate-700">{status === 'todo' ? '未着手' : status === 'doing' ? '進行中' : '完了'}</span>
+                  <span className="ml-auto bg-white border border-slate-200 text-xs font-bold px-2 py-0.5 rounded-full text-slate-500">{tasks.filter(t => t.status === status).length}</span>
+                </div>
+                
+                <div className="space-y-2">
+                  {tasks.filter(t => t.status === status).map(task => (
+                    status === 'done' ? (
+                      /* 完了カラム：横一列リスト形式 */
+                      <div key={task.id} className="bg-white/60 p-3 rounded-lg border border-slate-200 flex items-center justify-between gap-3 text-sm group hover:bg-white transition-all">
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 whitespace-nowrap min-w-[65px] text-center">
+                            {task.deadline || '完了済'}
+                          </span>
+                          <h5 className="font-medium text-slate-600 truncate flex-1 line-through decoration-slate-300">
+                            {task.title}
+                          </h5>
+                          <span className="hidden sm:inline text-[10px] text-slate-400 bg-slate-100/50 px-1.5 rounded truncate max-w-[60px]">
+                            {task.owner}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button 
+                            onClick={() => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', task.id), { status: 'doing' })} 
+                            className="p-1 text-slate-300 hover:text-blue-500 transition-colors" 
+                            title="進行中に戻す"
+                          >
+                            <ChevronRight className="rotate-180" size={14} />
+                          </button>
+                          <button 
+                            onClick={() => requestDelete('tasks', task.id)} 
+                            className="p-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* 未着手・進行中カラム：カード形式 */
+                      <div key={task.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm group hover:border-blue-300 transition-all">
+                        <div className="flex justify-between items-start mb-2">
+                          <h5 className="font-bold text-slate-800 text-sm leading-snug">{task.title}</h5>
+                          <button onClick={() => requestDelete('tasks', task.id)} className="text-slate-300 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"><Trash2 size={14} /></button>
+                        </div>
+                        <div className="flex justify-between items-end">
+                          <div className="text-[10px] text-slate-400 font-medium leading-relaxed">担当: {task.owner}<br/>期限: {task.deadline}</div>
+                          <div className="flex gap-1">
+                            {status !== 'todo' && <button onClick={() => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', task.id), { status: 'todo' })} className="p-1 text-slate-400 hover:text-blue-500 transition-colors" title="前に戻す"><ChevronRight className="rotate-180" size={14} /></button>}
+                            {status !== 'done' && <button onClick={() => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', task.id), { status: status === 'todo' ? 'doing' : 'done' })} className="p-1 text-blue-500 hover:text-blue-700 transition-colors" title="次へ進める"><ChevronRight size={14} /></button>}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Meeting Logs */}
+        <Card title="面談ログ" icon={Calendar} actions={<button onClick={() => { setEditItem(null); setActiveModal('meeting'); }} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">+ 追加</button>}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead><tr className="bg-slate-50 border-y border-slate-100 text-[10px] text-slate-400 font-bold uppercase tracking-widest"><th className="px-6 py-3">実施日</th><th className="px-6 py-3">アジェンダ</th><th className="px-6 py-3">決定事項</th><th className="px-6 py-3 text-center">操作</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {meetings.length === 0 && (
+                  <tr>
+                    <td colSpan="4" className="px-6 py-10 text-center text-slate-400 italic text-sm">記録はありません</td>
+                  </tr>
+                )}
+                {meetings.sort((a,b) => new Date(b.date) - new Date(a.date)).map(meeting => (
+                  <tr key={meeting.id} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="px-6 py-4 text-sm font-bold text-blue-600 whitespace-nowrap">{meeting.date}</td>
+                    <td className="px-6 py-4 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{meeting.agenda}</td>
+                    <td className="px-6 py-4 text-sm text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">{meeting.decisions}</td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex gap-2 justify-center">
+                        <button onClick={() => { setEditItem(meeting); setActiveModal('meeting'); }} className="text-slate-300 hover:text-blue-500 transition-colors"><Edit2 size={14} /></button>
+                        <button onClick={() => requestDelete('meetings', meeting.id)} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        {/* --- Modals --- */}
+
+        {/* Delete Confirmation Modal */}
+        <Modal isOpen={activeModal === 'delete_confirm'} onClose={() => setActiveModal(null)} title="削除の確認">
+          <div className="space-y-6">
+            <p className="text-slate-700">この項目を完全に削除しますか？この操作は取り消せません。</p>
+            <div className="flex gap-4">
+              <button onClick={() => setActiveModal(null)} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors">キャンセル</button>
+              <button onClick={executeDelete} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors">削除する</button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* AI Response Modal */}
+        <Modal isOpen={activeModal === 'ai_response'} onClose={() => setActiveModal(null)} title="✨ AI サポート" size="max-w-2xl">
+          <div className="space-y-4">
+            <div className={`prose prose-sm max-w-none text-slate-700 leading-relaxed min-h-[100px] ${aiLoading ? 'opacity-50' : ''}`}>
+              {aiResponse.split('\n').map((line, i) => (
+                <p key={i} className={line.startsWith('#') ? 'font-bold text-slate-900 mt-4' : line.startsWith('-') ? 'ml-4' : ''}>
+                  {line}
+                </p>
+              ))}
+            </div>
+            {aiLoading && <div className="flex justify-center py-4"><Loader2 className="animate-spin text-blue-500" /></div>}
+            {!aiLoading && editItem?.type === 'bulk_tasks' && (
+              <div className="flex gap-4">
+                <button onClick={() => setActiveModal(null)} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold">キャンセル</button>
+                <button 
+                  onClick={addAiTasksToBoard}
+                  className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"
+                >
+                  <Plus size={18} /> これらをタスクリストに追加する
+                </button>
+              </div>
+            )}
+            {!aiLoading && !editItem && (
+              <button onClick={() => setActiveModal(null)} className="w-full py-3 bg-slate-100 text-slate-700 rounded-xl font-bold">閉じる</button>
+            )}
+          </div>
+        </Modal>
+
+        {/* Config Modal */}
+        <Modal isOpen={activeModal === 'config'} onClose={() => setActiveModal(null)} title="全体設定の編集">
+          <form onSubmit={saveConfig} className="space-y-4">
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">会社名</label><input name="companyName" defaultValue={config.companyName} className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" /></div>
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">ロゴ (絵文字)</label><input name="logo" defaultValue={config.logo} className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" maxLength="2" /></div>
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">ビジョン</label><textarea name="vision" defaultValue={config.vision} className="w-full px-4 py-2 border rounded-xl h-24 outline-none focus:ring-2 focus:ring-blue-500 font-medium" /></div>
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">スローガン</label><textarea name="slogan" defaultValue={config.slogan} className="w-full px-4 py-2 border rounded-xl h-24 outline-none focus:ring-2 focus:ring-blue-500 font-medium" /></div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setActiveModal(null)} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors">キャンセル</button>
+              <button type="submit" className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"><Save size={18} /> 保存する</button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* KPI Modal */}
+        <Modal isOpen={activeModal === 'kpi'} onClose={() => setActiveModal(null)} title={editItem ? "KPIの編集" : "新しいKPIの追加"}>
+          <form onSubmit={handleKpi} className="space-y-4">
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">項目名</label><input name="name" defaultValue={editItem?.name} required className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="売上、残業時間など" /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">現在値</label><input name="current" type="number" defaultValue={editItem?.current} required className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" /></div>
+              <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">目標値</label><input name="target" type="number" defaultValue={editItem?.target} required className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" /></div>
+            </div>
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">単位</label><input name="unit" defaultValue={editItem?.unit} className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="円、時間、人など" /></div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => {setActiveModal(null); setEditItem(null);}} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors">キャンセル</button>
+              <button type="submit" className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors">{editItem ? "更新する" : "追加する"}</button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Challenge Modal */}
+        <Modal isOpen={activeModal === 'challenge'} onClose={() => setActiveModal(null)} title={editItem ? "課題の編集" : "新しい課題の追加"}>
+          <form onSubmit={handleChallenge} className="space-y-4">
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">課題タイトル</label><input name="title" defaultValue={editItem?.title} required className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="採用と定着、収益性の向上など" /></div>
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">戦略方針</label><textarea name="strategy" defaultValue={editItem?.strategy} required className="w-full px-4 py-2 border rounded-xl h-24 outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="どのように解決しますか？" /></div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => {setActiveModal(null); setEditItem(null);}} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors">キャンセル</button>
+              <button type="submit" className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors">保存する</button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Task Modal */}
+        <Modal isOpen={activeModal === 'task'} onClose={() => setActiveModal(null)} title={editItem ? "タスクの編集" : "タスクの追加"}>
+          <form onSubmit={handleTask} className="space-y-4">
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">タスク内容</label><input name="title" defaultValue={editItem?.title} required className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="何をしますか？" /></div>
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">担当者</label><input name="owner" defaultValue={editItem?.owner} className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="誰が担当しますか？" /></div>
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">期限</label><input name="deadline" defaultValue={editItem?.deadline} className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="例: 10/末、毎週金曜など" /></div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => {setActiveModal(null); setEditItem(null);}} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors">キャンセル</button>
+              <button type="submit" className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors">追加する</button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Meeting Modal */}
+        <Modal isOpen={activeModal === 'meeting'} onClose={() => setActiveModal(null)} title={editItem ? "面談記録の編集" : "新しい面談記録"}>
+          <form onSubmit={handleMeeting} className="space-y-4">
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">実施日</label><input name="date" type="date" defaultValue={editItem?.date || new Date().toISOString().split('T')[0]} required className="w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500" /></div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">アジェンダ</label>
+              <textarea id="new_agenda" name="agenda" defaultValue={editItem?.agenda} required className="w-full px-4 py-2 border rounded-xl h-24 outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="相談内容など" />
+              <button 
+                type="button" 
+                onClick={summarizeMeetingAgenda}
+                disabled={aiLoading}
+                className="mt-2 text-xs text-amber-600 font-bold flex items-center gap-1 hover:text-amber-700 transition-colors"
+              >
+                {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} 
+                ✨ AI で要約して決定事項のドラフトを作成
+              </button>
+            </div>
+            <div><label className="text-xs font-bold text-slate-500 uppercase tracking-widest">決定事項 & Next Action</label><textarea id="new_decisions" name="decisions" defaultValue={editItem?.decisions} required className="w-full px-4 py-2 border rounded-xl h-32 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" placeholder="誰が、いつまでに、何をするか" /></div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => {setActiveModal(null); setEditItem(null);}} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors">キャンセル</button>
+              <button type="submit" className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors">記録を保存する</button>
+            </div>
+          </form>
+        </Modal>
+
+        <footer className="text-center text-slate-400 text-[10px] uppercase tracking-[0.2em] pt-8 pb-12 border-t border-slate-200 font-medium">
+          © {new Date().getFullYear()} F&M Club Support Dashboard
+        </footer>
+      </div>
+    </div>
+  );
+}
